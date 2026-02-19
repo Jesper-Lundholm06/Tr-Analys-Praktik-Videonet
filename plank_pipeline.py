@@ -95,22 +95,38 @@ for i, filename in enumerate(images):
             # Skapa analysbild från croppen
             analysis_img = crop.copy()
 
-            # --- 1. Hörnanalys med YOLO ---
+   # --- 1. Hörnanalys med YOLO ---
             corner_results = corner_model(crop, conf=CORNER_CONFIDENCE, verbose=False)
-            n_corners = len(corner_results[0].boxes)
 
-            # Rita ut hittade hörn
+            unique_centers = []
+            DIST_THRESHOLD = 30  # justera mellan 20–40 vid behov
+
             for c_box in corner_results[0].boxes:
                 cx1, cy1, cx2, cy2 = map(int, c_box.xyxy[0])
-                c_conf = float(c_box.conf[0])
-                # Grön rektangel + cirkel i mitten för varje hörn
-                cv2.rectangle(analysis_img, (cx1, cy1), (cx2, cy2), (0, 255, 0), 2)
                 center_x = (cx1 + cx2) // 2
                 center_y = (cy1 + cy2) // 2
-                cv2.circle(analysis_img, (center_x, center_y), 5, (0, 255, 0), -1)
-                cv2.putText(analysis_img, f"horn {c_conf:.0%}",
-                            (cx1, cy1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 255, 0), 1)
 
+                is_new = True
+                for ux, uy in unique_centers:
+                    distance = ((center_x - ux)**2 + (center_y - uy)**2) ** 0.5
+                    if distance < DIST_THRESHOLD:
+                        is_new = False
+                        break
+
+                if is_new:
+                    unique_centers.append((center_x, center_y))
+
+            n_corners = len(unique_centers)
+
+            # Rita ut hittade hörn
+            BOX_SIZE = 30  # storlek på rutan runt hörnet
+            for center_x, center_y in unique_centers:
+                x1 = center_x - BOX_SIZE // 2
+                y1 = center_y - BOX_SIZE // 2
+                x2 = center_x + BOX_SIZE // 2
+                y2 = center_y + BOX_SIZE // 2
+                cv2.rectangle(analysis_img, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                cv2.circle(analysis_img, (center_x, center_y), 5, (0, 255, 0), -1)
             # Bedöm: mindre än 4 hörn = defekt
             if n_corners < 4:
                 verdict = "SUSPECT"
@@ -126,6 +142,7 @@ for i, filename in enumerate(images):
                 cv2.putText(analysis_img, f"crack {float(cr_box.conf[0]):.0%}",
                             (crx1, cry1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
 
+            # --- Text på analysbild ---
             # --- Text på analysbild ---
             c1 = (0, 255, 0) if verdict == "GOOD" else (0, 0, 255)
             c2 = (0, 255, 0) if n_cracks == 0 else (0, 0, 255)
