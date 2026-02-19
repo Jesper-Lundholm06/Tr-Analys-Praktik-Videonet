@@ -1,8 +1,8 @@
-import cv2
+import cv2 
 import numpy as np
 import os
+import torch
 from ultralytics import YOLO
-
 # Fix: ultralytics patchar cv2.imshow, återställ originalet
 # === KONFIGURATION ===
 INPUT_DIR = "input_images"
@@ -117,8 +117,9 @@ for i, filename in enumerate(images):
                     unique_centers.append((center_x, center_y))
 
             n_corners = len(unique_centers)
+            
 
-            # Rita ut hittade hörn
+            # Rita ut hittade hörnn_corners = len(unique_centers)
             BOX_SIZE = 30  # storlek på rutan runt hörnet
             for center_x, center_y in unique_centers:
                 x1 = center_x - BOX_SIZE // 2
