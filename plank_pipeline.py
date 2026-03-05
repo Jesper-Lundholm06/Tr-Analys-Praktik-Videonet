@@ -9,83 +9,126 @@ INPUT_DIR = "input_images"
 MODEL_PATH = "best.pt"
 CRACK_MODEL_PATH = "best_cracks.pt"
 CORNER_MODEL_PATH = "Best_Corners.pt"
-CONFIDENCE = 0.8
+CONFIDENCE = 0.6
 CRACK_CONFIDENCE = 0.2
-CORNER_CONFIDENCE = 0.2
+
+# Hörndetektering – "bästa per zon"-logik
+CORNER_SCAN_CONF = 0.01       # Låg tröskel – fånga ALLA detektioner
+CORNER_MIN_CONF  = 0.1       # Golv – bästa i zonen måste överstiga detta
 
 # Margin
 MARGIN_LEFT = 50
 MARGIN_RIGHT = 120
 MARGIN_Y = 15
 
-# Zonbaserad hörndetektering – hur stor del av bilden utgör varje zon (0.0–1.0)
-# Hörn måste hamna inom ZONE_MARGIN från kanten för att räknas som ett giltigt hörn
-ZONE_MARGIN = 0.35  # 35% av croppens bredd/höjd räknas som "hörn-zon"
+# Zonbaserad hörndetektering – vänster/höger
+ZONE_MARGIN = 0.35
 
-# Output
-OUTPUT_DIR = "defekta_plankor"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+# Output – två separata mappar
+OUTPUT_DIR_CRACKS = "defekta_plankor"
+OUTPUT_DIR_CORNERS = "defekta_horn"
+os.makedirs(OUTPUT_DIR_CRACKS, exist_ok=True)
+os.makedirs(OUTPUT_DIR_CORNERS, exist_ok=True)
 
 # Ladda modeller
 model = YOLO(MODEL_PATH)
 crack_model = YOLO(CRACK_MODEL_PATH)
 corner_model = YOLO(CORNER_MODEL_PATH)
-print("Modeller laddade")
+print("Modeller laddade (planka, sprickor, hörn)")
 
 
-def check_corners_by_zone(unique_centers, crop_w, crop_h, zone_margin=ZONE_MARGIN):
+def best_conf_per_zone(boxes, crop_w, zone_margin=ZONE_MARGIN):
     """
-    Delar upp croppen i 4 zoner (kvadranter) och kontrollerar om det finns
-    minst ett hörn i varje zon. Returnerar (verdict, zone_hits) där
-    zone_hits är en dict med True/False per zon.
-
-    Zonerna är:
-      TL = övre-vänster  (x < zone_margin*w, y < zone_margin*h)
-      TR = övre-höger    (x > (1-zone_margin)*w, y < zone_margin*h)
-      BL = nedre-vänster (x < zone_margin*w, y > (1-zone_margin)*h)
-      BR = nedre-höger   (x > (1-zone_margin)*w, y > (1-zone_margin)*h)
+    Hitta bästa (högsta) confidence per zon (L/R) från ALLA detektioner.
+    Returnerar best-dict och dedupade unika centers för visualisering.
     """
     x_thresh_low  = crop_w * zone_margin
     x_thresh_high = crop_w * (1 - zone_margin)
-    y_thresh_low  = crop_h * zone_margin
-    y_thresh_high = crop_h * (1 - zone_margin)
 
-    zones = {"TL": False, "TR": False, "BL": False, "BR": False}
+    best = {
+        "L": {"conf": 0.0, "center": None},
+        "R": {"conf": 0.0, "center": None}
+    }
 
-    for cx, cy in unique_centers:
-        if cx < x_thresh_low and cy < y_thresh_low:
-            zones["TL"] = True
-        if cx > x_thresh_high and cy < y_thresh_low:
-            zones["TR"] = True
-        if cx < x_thresh_low and cy > y_thresh_high:
-            zones["BL"] = True
-        if cx > x_thresh_high and cy > y_thresh_high:
-            zones["BR"] = True
+    # Dedup + spåra bästa per zon
+    unique_centers = []
+    dist_threshold = 30
 
-    all_found = all(zones.values())
-    verdict = "GOOD" if all_found else "SUSPECT"
+    for b in boxes:
+        cx1, cy1, cx2, cy2 = map(int, b.xyxy[0])
+        center_x = (cx1 + cx2) // 2
+        center_y = (cy1 + cy2) // 2
+        conf = float(b.conf[0])
+
+        # Dedup
+        is_new = True
+        for ux, uy, _ in unique_centers:
+            distance = ((center_x - ux)**2 + (center_y - uy)**2) ** 0.5
+            if distance < dist_threshold:
+                is_new = False
+                break
+        if is_new:
+            unique_centers.append((center_x, center_y, conf))
+
+        # Bästa per zon (innan dedup – vi vill ha högsta conf oavsett)
+        if center_x < x_thresh_low:
+            if conf > best["L"]["conf"]:
+                best["L"] = {"conf": conf, "center": (center_x, center_y)}
+        elif center_x > x_thresh_high:
+            if conf > best["R"]["conf"]:
+                best["R"] = {"conf": conf, "center": (center_x, center_y)}
+
+    return best, unique_centers
+
+
+def check_zones(best, min_conf=None):
+    """Kolla om båda zoner har en detektion över minimigolvet."""
+    if min_conf is None:
+        min_conf = CORNER_MIN_CONF
+    zones = {
+        "L": best["L"]["conf"] >= min_conf,
+        "R": best["R"]["conf"] >= min_conf
+    }
+    verdict = "GOOD" if all(zones.values()) else "DEFEKT"
     return verdict, zones
 
 
 def draw_corner_zones(img, zone_margin=ZONE_MARGIN):
-    """Ritar halvtransparenta zoner i hörnen på analysbilden för felsökning."""
+    """Rita vänster- och högerzoner som overlay."""
     h, w = img.shape[:2]
     x_low  = int(w * zone_margin)
     x_high = int(w * (1 - zone_margin))
-    y_low  = int(h * zone_margin)
-    y_high = int(h * (1 - zone_margin))
 
     overlay = img.copy()
     alpha = 0.12
-    zone_color = (255, 200, 0)  # blågrön ton
+    zone_color = (255, 200, 0)
 
-    # Rita de fyra hörnzonerna
-    cv2.rectangle(overlay, (0, 0),       (x_low, y_low),  zone_color, -1)
-    cv2.rectangle(overlay, (x_high, 0),  (w, y_low),      zone_color, -1)
-    cv2.rectangle(overlay, (0, y_high),  (x_low, h),      zone_color, -1)
-    cv2.rectangle(overlay, (x_high, y_high), (w, h),      zone_color, -1)
+    cv2.rectangle(overlay, (0, 0), (x_low, h), zone_color, -1)
+    cv2.rectangle(overlay, (x_high, 0), (w, h), zone_color, -1)
 
     return cv2.addWeighted(overlay, alpha, img, 1 - alpha, 0)
+
+
+def draw_best_corners(analysis_img, best, crop_w, zone_margin=ZONE_MARGIN):
+    """Rita bästa detektion per zon – grön om godkänd, röd om under golv."""
+    BOX_SIZE = 30
+
+    for zone_name, zone_data in best.items():
+        if zone_data["center"] is None:
+            continue
+        center_x, center_y = zone_data["center"]
+        conf = zone_data["conf"]
+
+        dot_color = (0, 255, 0) if conf >= CORNER_MIN_CONF else (0, 0, 255)
+
+        bx1 = center_x - BOX_SIZE // 2
+        by1 = center_y - BOX_SIZE // 2
+        bx2 = center_x + BOX_SIZE // 2
+        by2 = center_y + BOX_SIZE // 2
+        cv2.rectangle(analysis_img, (bx1, by1), (bx2, by2), dot_color, 2)
+        cv2.circle(analysis_img, (center_x, center_y), 5, dot_color, -1)
+        cv2.putText(analysis_img, f"{conf:.0%}", (bx2 + 3, center_y + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, dot_color, 1)
 
 
 # Hitta alla bilder
@@ -95,7 +138,6 @@ images = sorted([
 ])
 print(f"Hittade {len(images)} bilder")
 
-# Visa en i taget (som en film)
 for i, filename in enumerate(images):
     filepath = os.path.join(INPUT_DIR, filename)
     img = cv2.imread(filepath)
@@ -103,13 +145,12 @@ for i, filename in enumerate(images):
     if img is None:
         continue
 
-    # Kör YOLO (plankdetektion)
     results = model(filepath, conf=CONFIDENCE, verbose=False)
 
     img_h, img_w = img.shape[:2]
     img_clean = img.copy()
 
-    # Rita margin-zoner (mörka kanter)
+    # Rita margin-zoner
     overlay = img.copy()
     cv2.rectangle(overlay, (0, 0), (MARGIN_LEFT, img_h), (0, 0, 255), -1)
     cv2.rectangle(overlay, (img_w - MARGIN_RIGHT, 0), (img_w, img_h), (0, 0, 255), -1)
@@ -120,6 +161,7 @@ for i, filename in enumerate(images):
     verdict = "GOOD"
     n_cracks = 0
     n_corners = 0
+    defect_reason = ""
 
     for box in results[0].boxes:
         x1, y1, x2, y2 = map(int, box.xyxy[0])
@@ -137,7 +179,7 @@ for i, filename in enumerate(images):
             label = f"HEL {conf:.0%}"
             full_count += 1
 
-            pad = 30
+            pad = 80
             crop = img_clean[
                 max(0, y1-pad):min(img_h, y2+pad),
                 max(0, x1-pad):min(img_w, x2+pad)
@@ -145,83 +187,76 @@ for i, filename in enumerate(images):
             crop_h, crop_w = crop.shape[:2]
 
             analysis_img = crop.copy()
-
-            # Rita hörnzoner på analysbilden (felsökning)
             analysis_img = draw_corner_zones(analysis_img)
 
-            # --- 1. Hörnanalys med YOLO ---
-            corner_results = corner_model(crop, conf=CORNER_CONFIDENCE, verbose=False)
-
-            unique_centers = []
-            DIST_THRESHOLD = 30
-
-            for c_box in corner_results[0].boxes:
-                cx1, cy1, cx2, cy2 = map(int, c_box.xyxy[0])
-                center_x = (cx1 + cx2) // 2
-                center_y = (cy1 + cy2) // 2
-
-                is_new = True
-                for ux, uy in unique_centers:
-                    distance = ((center_x - ux)**2 + (center_y - uy)**2) ** 0.5
-                    if distance < DIST_THRESHOLD:
-                        is_new = False
-                        break
-
-                if is_new:
-                    unique_centers.append((center_x, center_y))
-
-            n_corners = len(unique_centers)
-
-            # === ZONBASERAD HÖRNBEDÖMNING ===
-            verdict, zones = check_corners_by_zone(unique_centers, crop_w, crop_h)
-
-            # Rita ut hörn – färga efter om de hamnade i en giltig zon
-            BOX_SIZE = 30
-            zone_names = ["TL", "TR", "BL", "BR"]
-            x_thresh_low  = crop_w * ZONE_MARGIN
-            x_thresh_high = crop_w * (1 - ZONE_MARGIN)
-            y_thresh_low  = crop_h * ZONE_MARGIN
-            y_thresh_high = crop_h * (1 - ZONE_MARGIN)
-
-            for center_x, center_y in unique_centers:
-                # Kontrollera om detta hörn bidrar till en zon
-                in_zone = (
-                    (center_x < x_thresh_low  or center_x > x_thresh_high) and
-                    (center_y < y_thresh_low   or center_y > y_thresh_high)
-                )
-                dot_color = (0, 255, 0) if in_zone else (0, 165, 255)  # grön = giltig, orange = utanför zon
-
-                bx1 = center_x - BOX_SIZE // 2
-                by1 = center_y - BOX_SIZE // 2
-                bx2 = center_x + BOX_SIZE // 2
-                by2 = center_y + BOX_SIZE // 2
-                cv2.rectangle(analysis_img, (bx1, by1), (bx2, by2), dot_color, 2)
-                cv2.circle(analysis_img, (center_x, center_y), 5, dot_color, -1)
-
-            # Visa vilka zoner som saknas
-            missing = [z for z, found in zones.items() if not found]
-            missing_str = "saknas: " + ",".join(missing) if missing else "alla hörn OK"
-
-            # --- 2. Sprickmodell ---
+            # ============================================================
+            # STEG 1: Sprickanalys – om sprickor → DEFEKT direkt
+            # ============================================================
             crack_results = crack_model(crop, conf=CRACK_CONFIDENCE, verbose=False)
             n_cracks = len(crack_results[0].boxes)
+
             for cr_box in crack_results[0].boxes:
                 crx1, cry1, crx2, cry2 = map(int, cr_box.xyxy[0])
                 cv2.rectangle(analysis_img, (crx1, cry1), (crx2, cry2), (0, 0, 255), 2)
                 cv2.putText(analysis_img, f"crack {float(cr_box.conf[0]):.0%}",
                             (crx1, cry1 - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 0, 255), 1)
 
-            # --- Text på analysbild ---
-            c1 = (0, 255, 0) if verdict == "GOOD" else (0, 0, 255)
-            c2 = (0, 255, 0) if n_cracks == 0 else (0, 0, 255)
-            cv2.putText(analysis_img, f"Horn: {verdict} ({missing_str})", (5, 20),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, c1, 2)
-            cv2.putText(analysis_img, f"Sprickor: {n_cracks}", (5, 42),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, c2, 2)
+            if n_cracks > 0:
+                # >>> Sprickor → DEFEKT → sparas i defekta_plankor/ <<<
+                verdict = "DEFEKT"
+                defect_reason = f"sprickor: {n_cracks}"
 
-            # Spara om defekt
-            if verdict != "GOOD" or n_cracks > 0:
-                cv2.imwrite(os.path.join(OUTPUT_DIR, f"defekt_{filename}"), analysis_img)
+                # Best_Corners enbart för visualisering (påverkar EJ verdict)
+                corner_results = corner_model(crop, conf=CORNER_SCAN_CONF, verbose=False)
+                best, unique_centers = best_conf_per_zone(corner_results[0].boxes, crop_w)
+                n_corners = len(unique_centers)
+                draw_best_corners(analysis_img, best, crop_w)
+
+            else:
+                # ============================================================
+                # STEG 2: Hörnanalys – bästa confidence per zon (V + H)
+                # ============================================================
+                corner_results = corner_model(crop, conf=CORNER_SCAN_CONF, verbose=False)
+                best, unique_centers = best_conf_per_zone(corner_results[0].boxes, crop_w)
+                n_corners = len(unique_centers)
+
+                corner_verdict, zones = check_zones(best)
+
+                # === DEBUG ===
+                print(f"  [{filename}] L: {best['L']['conf']:.3f}, R: {best['R']['conf']:.3f} -> {corner_verdict}")
+                # === SLUT DEBUG ===
+
+                if corner_verdict == "GOOD":
+                    verdict = "GOOD"
+                    defect_reason = f"L:{best['L']['conf']:.0%} R:{best['R']['conf']:.0%}"
+                    draw_best_corners(analysis_img, best, crop_w)
+                else:
+                    missing = [z for z, found in zones.items() if not found]
+                    missing_str = ", ".join(missing)
+                    verdict = "DEFEKT"
+                    defect_reason = f"saknad sida: {missing_str} (L:{best['L']['conf']:.0%} R:{best['R']['conf']:.0%})"
+                    draw_best_corners(analysis_img, best, crop_w)
+
+            # --- Text på analysbild ---
+            c_verdict = (0, 0, 255) if verdict == "DEFEKT" else (0, 255, 0)
+            c_crack = (0, 255, 0) if n_cracks == 0 else (0, 0, 255)
+
+            cv2.putText(analysis_img, f"Resultat: {verdict}", (5, 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, c_verdict, 2)
+            cv2.putText(analysis_img, f"Sprickor: {n_cracks}", (5, 42),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, c_crack, 2)
+            cv2.putText(analysis_img, f"Sidor: {n_corners}", (5, 64),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1)
+
+            cv2.putText(analysis_img, defect_reason, (5, analysis_img.shape[0] - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.35, (200, 200, 200), 1)
+
+            # === SPARA TILL RÄTT MAPP ===
+            if verdict == "DEFEKT":
+                if n_cracks > 0:
+                    cv2.imwrite(os.path.join(OUTPUT_DIR_CRACKS, f"defekt_{filename}"), analysis_img)
+                else:
+                    cv2.imwrite(os.path.join(OUTPUT_DIR_CORNERS, f"defekt_{filename}"), analysis_img)
 
         else:
             color = (0, 0, 255)
@@ -244,9 +279,9 @@ for i, filename in enumerate(images):
     cv2.imshow("Plankanalys (Q=avsluta, SPACE=paus)", img)
 
     if analysis_img is not None:
-        cv2.imshow("Analys: horn + sprickor", analysis_img)
+        cv2.imshow("Analys: sidor + sprickor", analysis_img)
     else:
-        try: cv2.destroyWindow("Analys: horn + sprickor")
+        try: cv2.destroyWindow("Analys: sidor + sprickor")
         except: pass
 
     key = cv2.waitKey(100)

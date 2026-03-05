@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Plank Kontrollpanel</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<h1>Plank Kontrollpanel</h1>
+
+<div class="container">
+
+    <!-- VÄNSTER: Live -->
+    <div class="live-section">
+
+        <!-- KÄLLVÄLJARE -->
+        <div class="source-toggle">
+            <button id="btn-mode-images" class="btn-mode active" onclick="setMode('images')">
+                Bilder
+            </button>
+            <button id="btn-mode-camera" class="btn-mode" onclick="setMode('camera')">
+                Kamera
+            </button>
+            <span id="mode-status" class="mode-status"></span>
+        </div>
+
+        <!-- RTSP-fält (visas bara i kameraläge) -->
+        <div id="rtsp-section" class="rtsp-section" style="display:none;">
+            <input id="rtsp-url" type="text" placeholder="rtsp://...">
+            <button class="btn-rtsp" onclick="updateRtspUrl()">Anslut</button>
+        </div>
+
+        <h2>Live-flöde</h2>
+        <img src="/video_feed" class="live-img" id="live-img">
+
+        <div class="pause-controls">
+            <button class="btn-pause" onclick="pause()">Pausa</button>
+            <button class="btn-resume" onclick="resume()">Återuppta</button>
+            <button id="btn-restart" class="btn-restart" onclick="restart()">Starta om</button>
+        </div>
+    </div>
+
+    <!-- HÖGER: Parametrar -->
+    <div class="control-section">
+
+        <!-- PRESET-KONTROLL -->
+        <div class="preset-section">
+            <h2>Presets</h2>
+            <div class="preset-card">
+                <div class="preset-top">
+                    <select id="preset-select">
+                        <option value="">Välj preset...</option>
+                    </select>
+                    <button class="btn-load" onclick="loadPreset()">Ladda</button>
+                </div>
+                <div class="preset-actions">
+                    <button class="btn-update-preset" onclick="updatePreset()">Uppdatera</button>
+                    <button class="btn-delete-preset" onclick="deletePreset()">Ta bort</button>
+                </div>
+                <div class="preset-create">
+                    <input id="preset-name" type="text" placeholder="Namn på nytt preset">
+                    <button class="btn-save-preset" onclick="savePreset()">Spara</button>
+                </div>
+                <button class="btn-defaults" onclick="resetDefaults()">
+                    Återställ standard
+                </button>
+            </div>
+        </div>
+
+        <hr style="margin: 15px 0; border: 1px solid #eee;">
+        <h2>Parametrar</h2>
+
+        <div class="slider-group">
+            <label>Hastighet (s/bild): <span id="val_FRAME_DELAY">0.30</span></label>
+            <input type="range" min="0.05" max="2.0" step="0.05" value="0.30"
+                   oninput="update('FRAME_DELAY', this.value)">
+        </div>
+
+        <hr style="margin: 15px 0; border: 1px solid #eee;">
+        <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Detektion</h3>
+
+        <div class="slider-group">
+            <label>Plank Confidence: <span id="val_CONFIDENCE">0.80</span></label>
+            <input type="range" min="0" max="1" step="0.01" value="0.80"
+                   oninput="updateConfidence(this.value)">
+        </div>
+
+        <div class="slider-group">
+            <label>Crack Confidence: <span id="val_CRACK_CONFIDENCE">0.20</span></label>
+            <input type="range" min="0" max="1" step="0.01" value="0.20"
+                   oninput="update('CRACK_CONFIDENCE', this.value)">
+        </div>
+
+        <hr style="margin: 15px 0; border: 1px solid #eee;">
+        <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Hörndetektering (V/H-zon)</h3>
+
+        <div class="slider-group">
+            <label>Corner Scan Conf: <span id="val_CORNER_SCAN_CONF">0.01</span></label>
+            <input type="range" min="0.001" max="0.2" step="0.001" value="0.01"
+                   oninput="update('CORNER_SCAN_CONF', this.value)">
+        </div>
+
+        <div class="slider-group">
+            <label>Corner Min Conf (golv): <span id="val_CORNER_MIN_CONF">0.10</span></label>
+            <input type="range" min="0.01" max="0.5" step="0.01" value="0.10"
+                   oninput="update('CORNER_MIN_CONF', this.value)">
+        </div>
+
+        <div class="slider-group">
+            <label>Zone Margin: <span id="val_ZONE_MARGIN">0.35</span></label>
+            <input type="range" min="0.1" max="0.5" step="0.01" value="0.35"
+                   oninput="update('ZONE_MARGIN', this.value)">
+        </div>
+
+        <div class="slider-group">
+            <label>Distance Threshold: <span id="val_DIST_THRESHOLD">30</span></label>
+            <input type="range" min="5" max="100" step="1" value="30"
+                   oninput="update('DIST_THRESHOLD', this.value)">
+        </div>
+
+        <hr style="margin: 15px 0; border: 1px solid #eee;">
+        <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Marginaler</h3>
+
+        <div class="slider-group">
+            <label>Margin Left: <span id="val_MARGIN_LEFT">50</span></label>
+            <input type="range" min="0" max="200" step="5" value="50"
+                   oninput="update('MARGIN_LEFT', this.value)">
+        </div>
+
+        <div class="slider-group">
+            <label>Margin Right: <span id="val_MARGIN_RIGHT">120</span></label>
+            <input type="range" min="0" max="300" step="5" value="120"
+                   oninput="update('MARGIN_RIGHT', this.value)">
+        </div>
+
+        <div class="slider-group">
+            <label>Margin Y: <span id="val_MARGIN_Y">15</span></label>
+            <input type="range" min="0" max="100" step="5" value="15"
+                   oninput="update('MARGIN_Y', this.value)">
+        </div>
+    </div>
+</div>
+
+<!-- STATISTIK -->
+<div class="stats-bar">
+    <div class="stats-header">
+        <h2>Statistik</h2>
+        <button class="btn-reset-stats" onclick="resetStats()">Nollställ</button>
+    </div>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-value" id="stat-total">0</span>
+            <span class="stat-label">Plankor totalt</span>
+        </div>
+        <div class="stat-card good">
+            <span class="stat-value" id="stat-good">0</span>
+            <span class="stat-label">Godkända</span>
+        </div>
+        <div class="stat-card bad">
+            <span class="stat-value" id="stat-cracks">0</span>
+            <span class="stat-label">Sprickor</span>
+        </div>
+        <div class="stat-card bad">
+            <span class="stat-value" id="stat-corners">0</span>
+            <span class="stat-label">Defekta hörn</span>
+        </div>
+        <div class="stat-card pct">
+            <span class="stat-value" id="stat-defekt-pct">0%</span>
+            <span class="stat-label">Defekt-andel</span>
+        </div>
+    </div>
+</div>
+
+<h2>Senaste 4 defekta plankor</h2>
+<div id="defects" class="defect-grid"></div>
+
+<!-- Modal -->
+<div id="modal" class="modal" onclick="closeModal()">
+    <img id="modal-img" class="modal-content">
+</div>
+
+<script>
+
+// ==========================================
+// AKTUELLT LÄGE
+// ==========================================
+let currentMode = "images";
+
+function setMode(mode) {
+    fetch("/set_mode/" + mode, { method: "POST" })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === "ok") {
+                currentMode = mode;
+                updateModeUI();
+                reconnectStream();
+            }
+        });
+}
+
+function updateModeUI() {
+    const btnImg = document.getElementById("btn-mode-images");
+    const btnCam = document.getElementById("btn-mode-camera");
+    const rtspSec = document.getElementById("rtsp-section");
+    const btnRestart = document.getElementById("btn-restart");
+
+    if (currentMode === "camera") {
+        btnImg.classList.remove("active");
+        btnCam.classList.add("active");
+        rtspSec.style.display = "flex";
+        btnRestart.style.display = "none";
+    } else {
+        btnImg.classList.add("active");
+        btnCam.classList.remove("active");
+        rtspSec.style.display = "none";
+        btnRestart.style.display = "";
+    }
+}
+
+function updateRtspUrl() {
+    const url = document.getElementById("rtsp-url").value.trim();
+    if (!url) {
+        alert("Ange en RTSP-URL.");
+        return;
+    }
+    fetch("/set_rtsp_url", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({url: url})
+    }).then(r => r.json()).then(data => {
+        if (data.status === "ok") {
+            reconnectStream();
+        }
+    });
+}
+
+// Hämta aktuellt läge vid sidladdning
+async function loadStatus() {
+    try {
+        const res = await fetch("/get_status");
+        const data = await res.json();
+        currentMode = data.mode;
+        document.getElementById("rtsp-url").value = data.rtsp_url || "";
+        updateModeUI();
+    } catch(e) {
+        console.error("Kunde inte hämta status:", e);
+    }
+}
+
+// Periodisk statuspoll
+async function pollStatus() {
+    try {
+        const res = await fetch("/get_status");
+        const data = await res.json();
+        const el = document.getElementById("mode-status");
+        if (currentMode === "camera") {
+            el.textContent = data.camera_connected ? "● Ansluten" : "○ Ansluter...";
+            el.style.color = data.camera_connected ? "#27ae60" : "#e67e22";
+        } else {
+            el.textContent = data.is_paused ? "⏸ Pausad" : "▶ Kör";
+            el.style.color = data.is_paused ? "#e67e22" : "#27ae60";
+        }
+    } catch(e) {}
+}
+
+// ==========================================
+// SLIDER / CONFIG
+// ==========================================
+
+function update(param, value) {
+    const el = document.getElementById("val_" + param);
+    if (el) {
+        const num = parseFloat(value);
+        el.innerText = num < 0.1 ? num.toFixed(3) : num.toFixed(2);
+    }
+    fetch("/update_config", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({param: param, value: value})
+    });
+}
+
+function updateConfidence(val) {
+    document.getElementById("val_CONFIDENCE").innerText = parseFloat(val).toFixed(2);
+    fetch("/set_confidence/" + val, { method: "POST" });
+}
+
+function pause() {
+    fetch("/pause", { method: "POST" });
+}
+
+function resume() {
+    fetch("/resume", { method: "POST" });
+}
+
+function restart() {
+    fetch("/restart", { method: "POST" });
+}
+
+// ==========================================
+// DEFEKTER
+// ==========================================
+
+async function loadDefects() {
+    try {
+        const res = await fetch("/defects");
+        const data = await res.json();
+        const container = document.getElementById("defects");
+        container.innerHTML = "";
+        data.images.forEach(imgHex => {
+            const img = document.createElement("img");
+            img.src = "data:image/jpeg;base64," + hexToBase64(imgHex);
+            img.className = "defect-img";
+            img.onclick = () => openModal(img.src);
+            container.appendChild(img);
+        });
+    } catch (e) {
+        console.error("Kunde inte ladda defekter:", e);
+    }
+}
+
+function hexToBase64(hex) {
+    const bytes = new Uint8Array(hex.match(/.{1,2}/g)
+        .map(byte => parseInt(byte, 16)));
+    let binary = '';
+    bytes.forEach(b => binary += String.fromCharCode(b));
+    return btoa(binary);
+}
+
+function openModal(src) {
+    document.getElementById("modal").style.display = "block";
+    document.getElementById("modal-img").src = src;
+}
+
+function closeModal() {
+    document.getElementById("modal").style.display = "none";
+}
+
+setInterval(loadDefects, 2000);
+setInterval(pollStatus, 1500);
+
+// ==========================================
+// STRÖM
+// ==========================================
+
+function reconnectStream() {
+    const img = document.getElementById('live-img');
+    img.src = '/video_feed?' + Date.now();
+}
+
+// ==========================================
+// PRESETS
+// ==========================================
+
+const SLIDER_PARAMS = [
+    "FRAME_DELAY", "CONFIDENCE", "CRACK_CONFIDENCE",
+    "CORNER_SCAN_CONF", "CORNER_MIN_CONF", "ZONE_MARGIN", "DIST_THRESHOLD",
+    "MARGIN_LEFT", "MARGIN_RIGHT", "MARGIN_Y"
+];
+
+function findSlider(param) {
+    const span = document.getElementById("val_" + param);
+    if (!span) return null;
+    return span.parentElement.parentElement.querySelector("input[type=range]");
+}
+
+function applySlidersFromValues(values) {
+    for (const param of SLIDER_PARAMS) {
+        if (!(param in values)) continue;
+        const val = values[param];
+        const slider = findSlider(param);
+        if (slider) slider.value = val;
+        const span = document.getElementById("val_" + param);
+        if (span) {
+            const num = parseFloat(val);
+            span.innerText = num < 0.1 ? num.toFixed(3) : num.toFixed(2);
+        }
+    }
+}
+
+async function refreshPresetList() {
+    try {
+        const res = await fetch("/presets");
+        const data = await res.json();
+        const sel = document.getElementById("preset-select");
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— Välj preset —</option>';
+        for (const name of Object.keys(data.presets)) {
+            const opt = document.createElement("option");
+            opt.value = name;
+            opt.textContent = name;
+            sel.appendChild(opt);
+        }
+        sel.value = current;
+    } catch (e) {
+        console.error("Kunde inte hämta presets:", e);
+    }
+}
+
+async function savePreset() {
+    const nameInput = document.getElementById("preset-name");
+    const name = nameInput.value.trim();
+    if (!name) { alert("Ange ett namn."); return; }
+    await fetch("/presets/" + encodeURIComponent(name), { method: "POST" });
+    nameInput.value = "";
+    await refreshPresetList();
+    document.getElementById("preset-select").value = name;
+}
+
+async function loadPreset() {
+    const name = document.getElementById("preset-select").value;
+    if (!name) { alert("Välj en preset först."); return; }
+    const res = await fetch("/load_preset/" + encodeURIComponent(name), { method: "POST" });
+    const data = await res.json();
+    if (data.values) applySlidersFromValues(data.values);
+    reconnectStream();
+}
+
+async function deletePreset() {
+    const sel = document.getElementById("preset-select");
+    const name = sel.value;
+    if (!name) { alert("Välj en preset att ta bort."); return; }
+    if (!confirm('Ta bort "' + name + '"?')) return;
+    await fetch("/presets/" + encodeURIComponent(name), { method: "DELETE" });
+    await refreshPresetList();
+}
+
+async function updatePreset() {
+    const name = document.getElementById("preset-select").value;
+    if (!name) { alert("Välj en preset att uppdatera."); return; }
+    if (!confirm('Skriva över "' + name + '"?')) return;
+    await fetch("/presets/" + encodeURIComponent(name), { method: "POST" });
+}
+
+async function resetDefaults() {
+    const res = await fetch("/reset_defaults", { method: "POST" });
+    const data = await res.json();
+    if (data.values) applySlidersFromValues(data.values);
+    document.getElementById("preset-select").value = "";
+    reconnectStream();
+}
+
+// ==========================================
+// STATISTIK
+// ==========================================
+
+async function pollStats() {
+    try {
+        const res = await fetch("/stats");
+        const s = await res.json();
+        document.getElementById("stat-total").textContent = s.total_planks;
+        document.getElementById("stat-good").textContent = s.good_planks;
+        document.getElementById("stat-cracks").textContent = s.defekt_cracks;
+        document.getElementById("stat-corners").textContent = s.defekt_corners;
+        document.getElementById("stat-defekt-pct").textContent = s.defekt_pct + "%";
+    } catch(e) {}
+}
+
+async function resetStats() {
+    if (!confirm("Nollställ all statistik?")) return;
+    await fetch("/reset_stats", { method: "POST" });
+}
+
+setInterval(pollStats, 1500);
+
+// ==========================================
+// INIT
+// ==========================================
+refreshPresetList();
+loadStatus();
+pollStats();
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,315 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 20px;
+    background: #f4f4f4;
+}
+
+h1 {
+    text-align: center;
+}
+
+.container {
+    display: flex;
+    gap: 40px;
+}
+
+.live-section {
+    flex: 2;
+}
+
+.control-section {
+    flex: 1;
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+}
+
+.live-img {
+    width: 100%;
+    border: 2px solid #333;
+}
+
+/* === KÄLLVÄLJARE === */
+
+.source-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 12px;
+}
+
+.btn-mode {
+    padding: 10px 24px;
+    font-size: 15px;
+    font-weight: bold;
+    border: 2px solid #bdc3c7;
+    cursor: pointer;
+    background: #ecf0f1;
+    color: #555;
+    transition: all 0.15s;
+}
+
+.btn-mode:first-child {
+    border-radius: 8px 0 0 8px;
+    border-right: 1px solid #bdc3c7;
+}
+
+.btn-mode:nth-child(2) {
+    border-radius: 0 8px 8px 0;
+    border-left: 1px solid #bdc3c7;
+}
+
+.btn-mode.active {
+    background: #2980b9;
+    color: white;
+    border-color: #2471a3;
+}
+
+.btn-mode:hover:not(.active) {
+    background: #d5dbdb;
+}
+
+.mode-status {
+    margin-left: 14px;
+    font-size: 14px;
+    font-weight: bold;
+}
+
+/* === RTSP-FÄLT === */
+
+.rtsp-section {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+.rtsp-section input {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    font-size: 13px;
+    font-family: monospace;
+}
+
+.btn-rtsp {
+    padding: 8px 16px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+}
+.btn-rtsp:hover {
+    background: #1e8449;
+}
+
+/* === KONTROLLKNAPPAR === */
+
+.pause-controls {
+    margin-top: 10px;
+    display: flex;
+    gap: 10px;
+}
+
+.pause-controls button {
+    padding: 8px 20px;
+    font-size: 14px;
+    font-weight: bold;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: white;
+}
+
+.btn-pause {
+    background: #e74c3c;
+}
+.btn-pause:hover {
+    background: #c0392b;
+}
+
+.btn-resume {
+    background: #27ae60;
+}
+.btn-resume:hover {
+    background: #1e8449;
+}
+
+.btn-restart {
+    background: #2980b9;
+}
+.btn-restart:hover {
+    background: #1f6d9e;
+}
+
+/* === SLIDERS === */
+
+.slider-group {
+    margin-bottom: 15px;
+}
+
+.slider-group label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+/* === DEFEKTER === */
+
+.defect-grid {
+    display: flex;
+    gap: 15px;
+    margin-top: 20px;
+}
+
+.defect-img {
+    width: 200px;
+    border: 2px solid red;
+    cursor: pointer;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 999;
+    padding-top: 100px;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.8);
+}
+
+.modal-content {
+    display: block;
+    margin: auto;
+    max-width: 80%;
+}
+
+/* === PRESET-SEKTION === */
+
+.preset-section {
+    margin-bottom: 10px;
+}
+
+.preset-section h2 {
+    margin: 0 0 10px 0;
+}
+
+.preset-card {
+    background: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 10px;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.preset-top {
+    display: flex;
+    gap: 8px;
+}
+
+.preset-top select {
+    flex: 1;
+    padding: 7px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+.preset-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.preset-create {
+    display: flex;
+    gap: 8px;
+}
+
+.preset-create input {
+    flex: 1;
+    padding: 7px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+
+.preset-actions button,
+.preset-create button {
+    flex: 1;
+}
+
+.btn-load {
+    padding: 6px 14px;
+    background: #3498db;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+}
+.btn-load:hover {
+    background: #1f6d9e;
+}
+
+.btn-save-preset {
+    padding: 6px 14px;
+    background: #27ae60;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+}
+.btn-save-preset:hover {
+    background: #1e8449;
+}
+
+.btn-delete-preset {
+    padding: 6px 10px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+}
+.btn-delete-preset:hover {
+    background: #c0392b;
+}
+
+.btn-update-preset {
+    padding: 6px 10px;
+    background: #f39c12;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+}
+.btn-update-preset:hover {
+    background: #d68910;
+}
+
+.btn-defaults {
+    padding: 8px 16px;
+    background: #7f8c8d;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+    width: 100%;
+}
+.btn-defaults:hover {
+    background: #636e72;
+}
