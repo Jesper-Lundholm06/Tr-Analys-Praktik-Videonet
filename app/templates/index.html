@@ -13,21 +13,13 @@
     <!-- VÄNSTER: Live -->
     <div class="live-section">
 
-        <!-- KÄLLVÄLJARE -->
-        <div class="source-toggle">
-            <button id="btn-mode-images" class="btn-mode active" onclick="setMode('images')">
-                Bilder
-            </button>
-            <button id="btn-mode-camera" class="btn-mode" onclick="setMode('camera')">
-                Kamera
-            </button>
-            <span id="mode-status" class="mode-status"></span>
-        </div>
-
-        <!-- RTSP-fält (visas bara i kameraläge) -->
-        <div id="rtsp-section" class="rtsp-section" style="display:none;">
-            <input id="rtsp-url" type="text" placeholder="rtsp://...">
-            <button class="btn-rtsp" onclick="updateRtspUrl()">Anslut</button>
+        <!-- KAMERASTATUS + RTSP -->
+        <div class="camera-bar">
+            <span id="camera-status" class="camera-status">● Ansluter...</span>
+            <div class="rtsp-section">
+                <input id="rtsp-url" type="text" placeholder="rtsp://...">
+                <button class="btn-rtsp" onclick="updateRtspUrl()">Anslut</button>
+            </div>
         </div>
 
         <h2>Live-flöde</h2>
@@ -36,7 +28,6 @@
         <div class="pause-controls">
             <button class="btn-pause" onclick="pause()">Pausa</button>
             <button class="btn-resume" onclick="resume()">Återuppta</button>
-            <button id="btn-restart" class="btn-restart" onclick="restart()">Starta om</button>
         </div>
     </div>
 
@@ -182,39 +173,29 @@
 <script>
 
 // ==========================================
-// AKTUELLT LÄGE
+// KAMERASTATUS
 // ==========================================
-let currentMode = "images";
 
-function setMode(mode) {
-    fetch("/set_mode/" + mode, { method: "POST" })
-        .then(r => r.json())
-        .then(data => {
-            if (data.status === "ok") {
-                currentMode = mode;
-                updateModeUI();
-                reconnectStream();
-            }
-        });
-}
+async function pollStatus() {
+    try {
+        const res = await fetch("/get_status");
+        const data = await res.json();
+        const el = document.getElementById("camera-status");
 
-function updateModeUI() {
-    const btnImg = document.getElementById("btn-mode-images");
-    const btnCam = document.getElementById("btn-mode-camera");
-    const rtspSec = document.getElementById("rtsp-section");
-    const btnRestart = document.getElementById("btn-restart");
+        if (data.camera_connected) {
+            el.textContent = data.is_paused ? "⏸ Pausad" : "● Live";
+            el.className = "camera-status " + (data.is_paused ? "paused" : "connected");
+        } else {
+            el.textContent = "○ Ansluter...";
+            el.className = "camera-status disconnected";
+        }
 
-    if (currentMode === "camera") {
-        btnImg.classList.remove("active");
-        btnCam.classList.add("active");
-        rtspSec.style.display = "flex";
-        btnRestart.style.display = "none";
-    } else {
-        btnImg.classList.add("active");
-        btnCam.classList.remove("active");
-        rtspSec.style.display = "none";
-        btnRestart.style.display = "";
-    }
+        // Fyll i RTSP-URL vid första laddning
+        const rtspInput = document.getElementById("rtsp-url");
+        if (!rtspInput.value && data.rtsp_url) {
+            rtspInput.value = data.rtsp_url;
+        }
+    } catch(e) {}
 }
 
 function updateRtspUrl() {
@@ -232,35 +213,6 @@ function updateRtspUrl() {
             reconnectStream();
         }
     });
-}
-
-// Hämta aktuellt läge vid sidladdning
-async function loadStatus() {
-    try {
-        const res = await fetch("/get_status");
-        const data = await res.json();
-        currentMode = data.mode;
-        document.getElementById("rtsp-url").value = data.rtsp_url || "";
-        updateModeUI();
-    } catch(e) {
-        console.error("Kunde inte hämta status:", e);
-    }
-}
-
-// Periodisk statuspoll
-async function pollStatus() {
-    try {
-        const res = await fetch("/get_status");
-        const data = await res.json();
-        const el = document.getElementById("mode-status");
-        if (currentMode === "camera") {
-            el.textContent = data.camera_connected ? "● Ansluten" : "○ Ansluter...";
-            el.style.color = data.camera_connected ? "#27ae60" : "#e67e22";
-        } else {
-            el.textContent = data.is_paused ? "⏸ Pausad" : "▶ Kör";
-            el.style.color = data.is_paused ? "#e67e22" : "#27ae60";
-        }
-    } catch(e) {}
 }
 
 // ==========================================
@@ -291,10 +243,6 @@ function pause() {
 
 function resume() {
     fetch("/resume", { method: "POST" });
-}
-
-function restart() {
-    fetch("/restart", { method: "POST" });
 }
 
 // ==========================================
@@ -467,7 +415,7 @@ setInterval(pollStats, 1500);
 // INIT
 // ==========================================
 refreshPresetList();
-loadStatus();
+pollStatus();
 pollStats();
 
 </script>

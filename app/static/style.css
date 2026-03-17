@@ -29,50 +29,33 @@ h1 {
     border: 2px solid #333;
 }
 
-/* === KÄLLVÄLJARE === */
+/* === KAMERA STATUS-BAR === */
 
-.source-toggle {
+.camera-bar {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 15px;
     margin-bottom: 12px;
+    flex-wrap: wrap;
 }
 
-.btn-mode {
-    padding: 10px 24px;
+.camera-status {
     font-size: 15px;
     font-weight: bold;
-    border: 2px solid #bdc3c7;
-    cursor: pointer;
-    background: #ecf0f1;
-    color: #555;
-    transition: all 0.15s;
+    white-space: nowrap;
+    color: #e67e22;
 }
 
-.btn-mode:first-child {
-    border-radius: 8px 0 0 8px;
-    border-right: 1px solid #bdc3c7;
+.camera-status.connected {
+    color: #27ae60;
 }
 
-.btn-mode:nth-child(2) {
-    border-radius: 0 8px 8px 0;
-    border-left: 1px solid #bdc3c7;
+.camera-status.disconnected {
+    color: #e67e22;
 }
 
-.btn-mode.active {
-    background: #2980b9;
-    color: white;
-    border-color: #2471a3;
-}
-
-.btn-mode:hover:not(.active) {
-    background: #d5dbdb;
-}
-
-.mode-status {
-    margin-left: 14px;
-    font-size: 14px;
-    font-weight: bold;
+.camera-status.paused {
+    color: #f39c12;
 }
 
 /* === RTSP-FÄLT === */
@@ -80,7 +63,8 @@ h1 {
 .rtsp-section {
     display: flex;
     gap: 8px;
-    margin-bottom: 12px;
+    flex: 1;
+    min-width: 250px;
 }
 
 .rtsp-section input {
@@ -136,13 +120,6 @@ h1 {
 }
 .btn-resume:hover {
     background: #1e8449;
-}
-
-.btn-restart {
-    background: #2980b9;
-}
-.btn-restart:hover {
-    background: #1f6d9e;
 }
 
 /* === SLIDERS === */
@@ -312,4 +289,95 @@ h1 {
 }
 .btn-defaults:hover {
     background: #636e72;
+}
+
+/* === STATISTIK === */
+
+.stats-bar {
+    margin-top: 30px;
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+}
+
+.stats-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.stats-header h2 {
+    margin: 0;
+}
+
+.btn-reset-stats {
+    padding: 8px 18px;
+    background: #e74c3c;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 13px;
+}
+.btn-reset-stats:hover {
+    background: #c0392b;
+}
+
+.stats-grid {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.stat-card {
+    flex: 1;
+    min-width: 120px;
+    background: #f0f3f5;
+    border-radius: 10px;
+    padding: 18px 14px;
+    text-align: center;
+    border-left: 4px solid #95a5a6;
+}
+
+.stat-card.good {
+    background: #eafaf1;
+    border-left-color: #27ae60;
+}
+
+.stat-card.bad {
+    background: #fdedec;
+    border-left-color: #e74c3c;
+}
+
+.stat-card.pct {
+    background: #fef9e7;
+    border-left-color: #f39c12;
+}
+
+.stat-value {
+    display: block;
+    font-size: 28px;
+    font-weight: bold;
+    color: #2c3e50;
+}
+
+.stat-card.good .stat-value {
+    color: #27ae60;
+}
+
+.stat-card.bad .stat-value {
+    color: #e74c3c;
+}
+
+.stat-card.pct .stat-value {
+    color: #f39c12;
+}
+
+.stat-label {
+    display: block;
+    font-size: 13px;
+    color: #777;
+    margin-top: 4px;
 }

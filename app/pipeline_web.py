@@ -1,33 +1,47 @@
 import cv2
 import numpy as np
 import os
+import sys
+import glob
 import time
+import logging
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from ultralytics import YOLO
 from collections import deque
 from config import config
+
+
+def resource_path(relative_path):
+    """Returnera korrekt path både i dev och PyInstaller exe."""
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+# Hämta loggers (skapade i main.py)
+system_log = logging.getLogger("system")
+camera_log = logging.getLogger("camera")
 
 # ==========================
 # MODELLER
 # ==========================
 
-model = YOLO(config.MODEL_PATH)
-crack_model = YOLO(config.CRACK_MODEL_PATH)
-corner_model = YOLO(config.CORNER_MODEL_PATH)
+model = YOLO(resource_path(config.MODEL_PATH))
+crack_model = YOLO(resource_path(config.CRACK_MODEL_PATH))
+corner_model = YOLO(resource_path(config.CORNER_MODEL_PATH))
 
 print("Modeller laddade")
+system_log.info("Models loaded: %s, %s, %s",
+                config.MODEL_PATH, config.CRACK_MODEL_PATH, config.CORNER_MODEL_PATH)
 
 # ==========================
 # GLOBALT TILLSTÅND
 # ==========================
 
 is_paused = False
-current_index = 0
-image_list = []
-
 current_confidence = config.CONFIDENCE
-source_mode = config.SOURCE_MODE  # "images" eller "camera"
 
 last_defects = deque(maxlen=4)
 
@@ -40,6 +54,8 @@ stats = {
     "partial": 0,
     "no_plank": 0,
 }
+
+startup_time = datetime.now()
 
 
 def reset_stats():
@@ -69,8 +85,9 @@ def log_stats_summary():
         f"  Ingen planka:   {s['no_plank']}\n"
         f"{'='*40}\n"
     )
-    with open(LOG_PATH, "a", encoding="utf-8") as f:
+    with open(get_log_path(), "a", encoding="utf-8") as f:
         f.write(line)
+
 
 # === KAMERA-TILLSTÅND ===
 camera_frame = None
@@ -79,17 +96,45 @@ camera_thread = None
 camera_running = False
 camera_connected = False
 last_camera_time = 0.0
+camera_reconnect_count = 0
 
 os.makedirs(config.OUTPUT_DIR_CRACKS, exist_ok=True)
 os.makedirs(config.OUTPUT_DIR_CORNERS, exist_ok=True)
 os.makedirs(config.LOG_DIR, exist_ok=True)
 
-LOG_PATH = os.path.join(config.LOG_DIR, config.LOG_FILE)
+
+# ==========================
+# LOGGNING MED ROTATION
+# ==========================
+
+def get_log_path():
+    """Returnera dagens loggfil (en per dag)."""
+    date_str = datetime.now().strftime("%Y-%m-%d")
+    return os.path.join(config.LOG_DIR, f"pipeline_{date_str}.log")
+
+
+def cleanup_old_logs():
+    """Ta bort loggfiler äldre än LOG_ROTATE_DAYS."""
+    if config.LOG_ROTATE_DAYS <= 0:
+        return
+    cutoff = datetime.now() - timedelta(days=config.LOG_ROTATE_DAYS)
+    pattern = os.path.join(config.LOG_DIR, "pipeline_*.log")
+    for path in glob.glob(pattern):
+        fname = os.path.basename(path)
+        try:
+            date_str = fname.replace("pipeline_", "").replace(".log", "")
+            file_date = datetime.strptime(date_str, "%Y-%m-%d")
+            if file_date < cutoff:
+                os.remove(path)
+                print(f"Raderade gammal logg: {fname}")
+                system_log.info("Deleted old log: %s", fname)
+        except (ValueError, OSError):
+            pass
 
 
 def log_entry(filename, status, plank_conf=None, l_conf=None, r_conf=None,
               n_cracks=0, crack_conf_max=None, verdict=None, reason=""):
-    """Skriv en rad till loggfilen."""
+    """Skriv en rad till dagens loggfil."""
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     if verdict:
@@ -107,20 +152,19 @@ def log_entry(filename, status, plank_conf=None, l_conf=None, r_conf=None,
         p_str = f"{plank_conf:.2f}" if plank_conf is not None else "—"
         line = f"[{ts}] [{filename}] {status} (conf: {p_str})"
 
-    with open(LOG_PATH, "a", encoding="utf-8") as f:
+    with open(get_log_path(), "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
 
 # ==========================
-# KAMERA-TRÅD
+# KAMERA-TRÅD (med exponentiell backoff)
 # ==========================
 
 def camera_reader():
     """Läser frames från RTSP-kameran i en separat tråd."""
-    global camera_frame, camera_running, camera_connected, last_camera_time
+    global camera_frame, camera_running, camera_connected
+    global last_camera_time, camera_reconnect_count
 
-    RECONNECT_DELAY = 3
-    TIMEOUT = 5
     cap = None
 
     while camera_running:
@@ -128,7 +172,21 @@ def camera_reader():
         if cap is None or not cap.isOpened():
             camera_connected = False
             rtsp_url = config.RTSP_URL
+
+            # Exponentiell backoff: 2, 4, 8, 16, ... upp till max
+            delay = min(
+                config.CAMERA_RECONNECT_BASE * (2 ** camera_reconnect_count),
+                config.CAMERA_RECONNECT_MAX
+            )
+            if camera_reconnect_count > 0:
+                print(f"📷 Väntar {delay}s innan nytt försök "
+                      f"(försök #{camera_reconnect_count + 1})...")
+                camera_log.info("Waiting %ss before reconnect attempt #%d",
+                                delay, camera_reconnect_count + 1)
+                time.sleep(delay)
+
             print(f"📷 Ansluter till kamera: {rtsp_url}")
+            camera_log.info("Connecting to camera: %s", rtsp_url)
 
             cap = cv2.VideoCapture(rtsp_url, cv2.CAP_FFMPEG)
             cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
@@ -136,12 +194,15 @@ def camera_reader():
 
             if not cap.isOpened():
                 print("❌ Kunde inte ansluta kamera")
+                camera_log.warning("Camera connection failed: %s", rtsp_url)
                 cap = None
-                time.sleep(RECONNECT_DELAY)
+                camera_reconnect_count += 1
                 continue
 
             print("✅ Kamera ansluten")
+            camera_log.info("Camera connected")
             camera_connected = True
+            camera_reconnect_count = 0  # Nollställ vid lyckad anslutning
             last_camera_time = time.time()
 
         # Läs frame
@@ -155,9 +216,12 @@ def camera_reader():
             time.sleep(0.05)
 
         # Watchdog – ingen frame på TIMEOUT sekunder → reconnect
-        if time.time() - last_camera_time > TIMEOUT:
+        if time.time() - last_camera_time > config.CAMERA_TIMEOUT:
             print("⚠️ Kamera timeout → reconnect")
+            camera_log.warning("RTSP timeout (%ds) - reconnecting",
+                               config.CAMERA_TIMEOUT)
             camera_connected = False
+            camera_reconnect_count += 1
             if cap is not None:
                 cap.release()
                 cap = None
@@ -168,17 +232,20 @@ def camera_reader():
         cap.release()
     camera_connected = False
     print("📷 Kameratråd stoppad")
+    camera_log.info("Camera thread stopped")
 
 
 def start_camera():
     """Starta kameraläsartråden."""
-    global camera_thread, camera_running
+    global camera_thread, camera_running, camera_reconnect_count
     if camera_running:
-        return  # Redan igång
+        return
     camera_running = True
+    camera_reconnect_count = 0
     camera_thread = threading.Thread(target=camera_reader, daemon=True)
     camera_thread.start()
     print("📷 Kameratråd startad")
+    camera_log.info("Camera thread started for %s", config.RTSP_URL)
 
 
 def stop_camera():
@@ -188,6 +255,7 @@ def stop_camera():
     camera_connected = False
     camera_frame = None
     print("📷 Stoppar kameratråd...")
+    camera_log.info("Stopping camera thread")
 
 
 # ==========================
@@ -281,15 +349,13 @@ def draw_best_corners(analysis_img, best):
 
 
 # ==========================
-# PLANK-ANALYS (gemensam för båda lägen)
+# PLANK-ANALYS
 # ==========================
 
 def process_plank(img, img_clean, filename="live"):
     """
     Kör hela plank-pipelinen på en bild.
     Returnerar (annotated_img, status_text).
-    img = bild att rita på (med margin-overlay)
-    img_clean = ren kopia för crop
     """
     global current_confidence
 
@@ -390,7 +456,7 @@ def process_plank(img, img_clean, filename="live"):
                 else:
                     save_path = os.path.join(config.OUTPUT_DIR_CORNERS, f"defekt_{filename}")
 
-                cv2.imwrite(save_path, crop)
+                cv2.imwrite(save_path, analysis_img)
 
                 _, jpg_bytes = cv2.imencode('.jpg', analysis_img)
                 last_defects.append(jpg_bytes.tobytes())
@@ -443,7 +509,7 @@ def process_plank(img, img_clean, filename="live"):
 
 
 # ==========================
-# HJÄLPFUNKTION: Lägg på margin-overlay
+# HJÄLPFUNKTION: Margin-overlay
 # ==========================
 
 def draw_margins(img):
@@ -474,101 +540,30 @@ def create_error_frame(message, sub=""):
 
 
 # ==========================
-# VIDEO STREAM – BILDLÄGE
+# VIDEO STREAM (kamera)
 # ==========================
 
-def generate_frames_images():
-    """Generator för bildläge (bläddrar genom mapp)."""
-    global is_paused, current_index, image_list
-
-    image_list = sorted([
-        f for f in os.listdir(config.INPUT_DIR)
-        if f.lower().endswith(('.jpg', '.jpeg', '.png'))
-    ])
-    total_images = len(image_list)
-
-    with open(LOG_PATH, "a", encoding="utf-8") as f:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"\n{'='*70}\n")
-        f.write(f"  Pipeline startad (BILDER): {ts} | {total_images} bilder\n")
-        f.write(f"{'='*70}\n")
-
-    while True:
-        # Kolla om vi bytt till kameraläge
-        if source_mode != "images":
-            return
-
-        if total_images == 0:
-            time.sleep(0.5)
-            continue
-
-        if is_paused:
-            time.sleep(0.1)
-            continue
-
-        if current_index >= total_images:
-            current_index = total_images - 1
-            is_paused = True
-            time.sleep(0.1)
-            continue
-
-        filename = image_list[current_index]
-        filepath = os.path.join(config.INPUT_DIR, filename)
-
-        img = cv2.imread(filepath)
-        if img is None:
-            current_index += 1
-            continue
-
-        img_clean = img.copy()
-        img = draw_margins(img)
-
-        img, status = process_plank(img, img_clean, filename)
-
-        cv2.putText(img,
-                    f"[BILDER] {current_index + 1}/{total_images} - {status}",
-                    (10, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX,
-                    0.7, (0, 255, 255), 2)
-
-        _, frame = cv2.imencode('.jpg', img)
-        current_index += 1
-
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' +
-               frame.tobytes() +
-               b'\r\n')
-
-        time.sleep(config.FRAME_DELAY)
-
-
-# ==========================
-# VIDEO STREAM – KAMERALÄGE
-# ==========================
-
-def generate_frames_camera():
-    """Generator för kameraläge (live RTSP)."""
+def generate_frames():
+    """Generator för live kameraflöde."""
     global is_paused, camera_frame
 
+    # Starta kameran automatiskt
     start_camera()
 
-    with open(LOG_PATH, "a", encoding="utf-8") as f:
+    # Rensa gamla loggar vid uppstart
+    cleanup_old_logs()
+
+    with open(get_log_path(), "a", encoding="utf-8") as f:
         ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         f.write(f"\n{'='*70}\n")
-        f.write(f"  Pipeline startad (KAMERA): {ts}\n")
+        f.write(f"  Pipeline startad: {ts}\n")
         f.write(f"{'='*70}\n")
 
     last_processed = None
     frame_counter = 0
 
     while True:
-        # Kolla om vi bytt till bildläge
-        if source_mode != "camera":
-            stop_camera()
-            return
-
         if is_paused:
-            # Visa senaste bearbetade bilden
             if last_processed is not None:
                 _, jpg = cv2.imencode('.jpg', last_processed)
                 yield (b'--frame\r\n'
@@ -583,7 +578,11 @@ def generate_frames_camera():
             raw = camera_frame.copy() if camera_frame is not None else None
 
         if raw is None:
-            err = create_error_frame("Ansluter till kamera...", config.RTSP_URL)
+            reconnect_info = ""
+            if camera_reconnect_count > 0:
+                reconnect_info = f"Forsok #{camera_reconnect_count + 1}"
+            err = create_error_frame("Ansluter till kamera...",
+                                     f"{config.RTSP_URL}  {reconnect_info}")
             _, jpg = cv2.imencode('.jpg', err)
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' +
@@ -604,7 +603,7 @@ def generate_frames_camera():
         # Status-text
         conn_text = "LIVE" if camera_connected else "RECONNECTING"
         cv2.putText(img,
-                    f"[KAMERA {conn_text}] {ts_label} - {status}",
+                    f"[{conn_text}] {ts_label} - {status}",
                     (10, 30),
                     cv2.FONT_HERSHEY_SIMPLEX,
                     0.7, (0, 255, 255), 2)
@@ -622,15 +621,9 @@ def generate_frames_camera():
 
 
 # ==========================
-# HUVUD-GENERATOR (router)
+# AUTO-START KAMERA VID IMPORT
 # ==========================
 
-def generate_frames():
-    """Väljer rätt generator baserat på source_mode."""
-    while True:
-        if source_mode == "camera":
-            yield from generate_frames_camera()
-        else:
-            yield from generate_frames_images()
-        # Liten paus vid lägesbyte
-        time.sleep(0.2)
+start_camera()
+print("🏭 Pipeline redo — kamera startar automatiskt")
+system_log.info("Pipeline ready - camera auto-started")

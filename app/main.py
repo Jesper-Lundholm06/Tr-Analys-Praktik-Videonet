@@ -1,18 +1,55 @@
 import json
 import os
+import sys
+import logging
+from datetime import datetime
+
+
+def resource_path(relative_path):
+    """Returnera korrekt path både i dev och PyInstaller exe."""
+    try:
+        base_path = sys._MEIPASS
+    except AttributeError:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
+
+# ==========================
+# LOGG-SETUP
+# ==========================
+LOG_DIR = "logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+_log_fmt = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+
+# --- system.log ---
+system_log = logging.getLogger("system")
+system_log.setLevel(logging.INFO)
+_sys_handler = logging.FileHandler(os.path.join(LOG_DIR, "system.log"), encoding="utf-8")
+_sys_handler.setFormatter(_log_fmt)
+system_log.addHandler(_sys_handler)
+
+# --- camera.log ---
+camera_log = logging.getLogger("camera")
+camera_log.setLevel(logging.INFO)
+_cam_handler = logging.FileHandler(os.path.join(LOG_DIR, "camera.log"), encoding="utf-8")
+_cam_handler.setFormatter(_log_fmt)
+camera_log.addHandler(_cam_handler)
+
+system_log.info("System started")
 
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
-from pipeline_web import generate_frames, last_defects
+from pipeline_web import generate_frames, last_defects, startup_time
 from config import config, Config
 
 app = FastAPI()
 
 # === PRESET-SYSTEM ===
-PRESETS_FILE = "presets.json"
+PRESETS_FILE = resource_path("presets.json")
 
 PRESET_PARAMS = [
     "CONFIDENCE", "CRACK_CONFIDENCE",
@@ -54,8 +91,13 @@ def _apply_values(values: dict):
     pipeline_web.current_confidence = config.CONFIDENCE
 
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+# === STATISKA FILER ===
+# I frozen-läge: bredvid exe:n. I dev: relativa sökvägar.
+_static_dir = resource_path("static")
+_templates_dir = resource_path("templates")
+
+app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+templates = Jinja2Templates(directory=_templates_dir)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -108,12 +150,35 @@ def set_confidence(value: float):
     return {"new_confidence": value}
 
 
-@app.post("/restart")
-def restart():
+# ==========================================
+# HÄLSOKONTROLL
+# ==========================================
+
+@app.get("/health")
+def health():
+    """Hälsokontroll — visar om systemet lever."""
     import pipeline_web
-    pipeline_web.current_index = 0
-    pipeline_web.is_paused = False
-    return {"status": "restarted"}
+    now = datetime.now()
+    uptime = now - startup_time
+    hours, remainder = divmod(int(uptime.total_seconds()), 3600)
+    minutes, seconds = divmod(remainder, 60)
+
+    last_frame_age = None
+    if pipeline_web.last_camera_time > 0:
+        last_frame_age = round(
+            now.timestamp() - pipeline_web.last_camera_time, 1
+        )
+
+    return {
+        "status": "ok" if pipeline_web.camera_connected else "degraded",
+        "uptime": f"{hours}h {minutes}m {seconds}s",
+        "camera_connected": pipeline_web.camera_connected,
+        "camera_reconnects": pipeline_web.camera_reconnect_count,
+        "last_frame_age_s": last_frame_age,
+        "rtsp_url": config.RTSP_URL,
+        "total_planks": pipeline_web.stats["total_planks"],
+        "is_paused": pipeline_web.is_paused,
+    }
 
 
 # ==========================================
@@ -138,58 +203,40 @@ def reset_stats():
     """Nollställ statistiken."""
     import pipeline_web
     pipeline_web.reset_stats()
+    system_log.info("Stats reset by user")
     return {"status": "reset"}
 
 
 # ==========================================
-# KÄLLA: BILD / KAMERA
+# KAMERA
 # ==========================================
 
 @app.get("/get_status")
 def get_status():
-    """Returnera aktuellt läge och kamerastatus."""
+    """Returnera aktuellt kamerastatus."""
     import pipeline_web
     return {
-        "mode": pipeline_web.source_mode,
         "rtsp_url": config.RTSP_URL,
         "camera_connected": pipeline_web.camera_connected,
         "is_paused": pipeline_web.is_paused,
     }
 
 
-@app.post("/set_mode/{mode}")
-def set_mode(mode: str):
-    """Byt mellan 'images' och 'camera'."""
-    import pipeline_web
-    if mode not in ("images", "camera"):
-        return JSONResponse({"error": "Ogiltigt läge"}, status_code=400)
-
-    pipeline_web.source_mode = mode
-    pipeline_web.is_paused = False
-
-    # Återställ bildindex vid byte till bilder
-    if mode == "images":
-        pipeline_web.current_index = 0
-
-    return {"status": "ok", "mode": mode}
-
-
 @app.post("/set_rtsp_url")
 async def set_rtsp_url(data: dict):
-    """Uppdatera RTSP-URL. Om kameran är aktiv, stoppa och starta om."""
+    """Uppdatera RTSP-URL och starta om kameran."""
     import pipeline_web
     url = data.get("url", "").strip()
     if not url:
         return JSONResponse({"error": "URL får inte vara tom"}, status_code=400)
 
     config.RTSP_URL = url
+    system_log.info("RTSP URL changed to: %s", url)
+    pipeline_web.stop_camera()
 
-    # Om vi är i kameraläge, starta om kameran med ny URL
-    if pipeline_web.source_mode == "camera":
-        pipeline_web.stop_camera()
-        import time
-        time.sleep(0.5)
-        pipeline_web.start_camera()
+    import time
+    time.sleep(0.5)
+    pipeline_web.start_camera()
 
     return {"status": "ok", "url": url}
 
@@ -221,6 +268,7 @@ def load_preset(name: str):
     if name not in presets:
         return JSONResponse({"error": "Preset finns inte"}, status_code=404)
     _apply_values(presets[name])
+    system_log.info("Preset loaded: %s", name)
     return {"status": "loaded", "name": name, "values": presets[name]}
 
 
@@ -242,6 +290,6 @@ def reset_defaults():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app",
-                host="127.0.0.1",
-                port=8011,
-                reload=True)
+                host=config.HOST,
+                port=config.PORT,
+                reload=False)

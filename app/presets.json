@@ -1,0 +1,62 @@
+{
+  "Test": {
+    "CONFIDENCE": 0.8,
+    "CRACK_CONFIDENCE": 0.2,
+    "CORNER_SCAN_CONF": 0.01,
+    "CORNER_MIN_CONF": 0.1,
+    "ZONE_MARGIN": 0.35,
+    "DIST_THRESHOLD": 30,
+    "MARGIN_LEFT": 50,
+    "MARGIN_RIGHT": 120,
+    "MARGIN_Y": 15,
+    "FRAME_DELAY": 1.0
+  },
+  "Test1": {
+    "CONFIDENCE": 0.8,
+    "CRACK_CONFIDENCE": 0.2,
+    "CORNER_SCAN_CONF": 0.029,
+    "CORNER_MIN_CONF": 0.11,
+    "ZONE_MARGIN": 0.35,
+    "DIST_THRESHOLD": 30,
+    "MARGIN_LEFT": 50,
+    "MARGIN_RIGHT": 120,
+    "MARGIN_Y": 15,
+    "FRAME_DELAY": 0.65
+  },
+  "Hardtest": {
+    "CONFIDENCE": 1.0,
+    "CRACK_CONFIDENCE": 1.0,
+    "CORNER_SCAN_CONF": 0.2,
+    "CORNER_MIN_CONF": 0.5,
+    "ZONE_MARGIN": 0.5,
+    "DIST_THRESHOLD": 100.0,
+    "MARGIN_LEFT": 200.0,
+    "MARGIN_RIGHT": 300.0,
+    "MARGIN_Y": 100.0,
+    "FRAME_DELAY": 1.2
+  },
+  "heheh": {
+    "CONFIDENCE": 0.15,
+    "CRACK_CONFIDENCE": 1.0,
+    "CORNER_SCAN_CONF": 0.2,
+    "CORNER_MIN_CONF": 0.5,
+    "ZONE_MARGIN": 0.5,
+    "DIST_THRESHOLD": 100,
+    "MARGIN_LEFT": 200,
+    "MARGIN_RIGHT": 300,
+    "MARGIN_Y": 100,
+    "FRAME_DELAY": 1.2
+  },
+  "Test (KOPIA)": {
+    "CONFIDENCE": 0.8,
+    "CRACK_CONFIDENCE": 0.2,
+    "CORNER_SCAN_CONF": 0.01,
+    "CORNER_MIN_CONF": 0.1,
+    "ZONE_MARGIN": 0.35,
+    "DIST_THRESHOLD": 30,
+    "MARGIN_LEFT": 50,
+    "MARGIN_RIGHT": 120,
+    "MARGIN_Y": 15,
+    "FRAME_DELAY": 0.55
+  }
+}

@@ -1,0 +1,20 @@
+# PlankInspection - Beroenden
+#
+# OBS: torch + torchvision (CPU-only) installeras SEPARAT i build.bat
+#      INNAN denna fil, så att ultralytics inte drar in CUDA-torch (~2 GB).
+
+# === Webbserver ===
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+
+# === AI / Detektion ===
+ultralytics
+opencv-python
+
+# === Windows-tjänst ===
+pywin32
+
+# === Bygg ===
+pyinstaller
