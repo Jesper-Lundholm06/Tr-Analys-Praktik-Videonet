@@ -1,8 +1,10 @@
+import glob as file_glob
 import json
 import os
 import sys
 import logging
 from datetime import datetime
+from pathlib import Path
 
 
 def resource_path(relative_path):
@@ -38,8 +40,8 @@ camera_log.addHandler(_cam_handler)
 
 system_log.info("System started")
 
-from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
+from fastapi import FastAPI, Request, UploadFile, File
+from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
 
@@ -55,7 +57,7 @@ PRESET_PARAMS = [
     "CONFIDENCE", "CRACK_CONFIDENCE",
     "CORNER_SCAN_CONF", "CORNER_MIN_CONF", "ZONE_MARGIN", "DIST_THRESHOLD",
     "MARGIN_LEFT", "MARGIN_RIGHT", "MARGIN_Y",
-    "FRAME_DELAY",
+    "PAD",
 ]
 
 DEFAULTS = {p: getattr(Config, p) for p in PRESET_PARAMS}
@@ -77,7 +79,7 @@ def _current_values() -> dict:
     return {p: getattr(config, p) for p in PRESET_PARAMS}
 
 
-INT_PARAMS = {"MARGIN_LEFT", "MARGIN_RIGHT", "MARGIN_Y", "DIST_THRESHOLD"}
+INT_PARAMS = {"MARGIN_LEFT", "MARGIN_RIGHT", "MARGIN_Y", "DIST_THRESHOLD", "PAD"}
 
 
 def _apply_values(values: dict):
@@ -285,6 +287,98 @@ def delete_preset(name: str):
 def reset_defaults():
     _apply_values(DEFAULTS)
     return {"status": "reset", "values": DEFAULTS}
+
+
+# ==========================================
+# BILDANALYS (mapp-läge)
+# ==========================================
+
+@app.post("/process_image")
+async def process_image(image: UploadFile = File(...)):
+    """Kör detektionspipelinen på en uppladdad bild (mapp-läge)."""
+    import numpy as np
+    import cv2
+    from pipeline_web import process_plank, draw_margins
+
+    contents = await image.read()
+    nparr = np.frombuffer(contents, np.uint8)
+    raw = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    if raw is None:
+        return JSONResponse({"error": "Ogiltig bild"}, status_code=400)
+
+    img_clean = raw.copy()
+    img = draw_margins(raw)
+    annotated, _status = process_plank(img, img_clean, image.filename or "folder.jpg")
+
+    _, buf = cv2.imencode('.jpg', annotated, [cv2.IMWRITE_JPEG_QUALITY, 88])
+    return Response(content=buf.tobytes(), media_type="image/jpeg")
+
+
+# ==========================================
+# BILDMAPP-LÄGE
+# ==========================================
+
+_SUPPORTED_EXT = {".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".tif"}
+
+_folder_state: dict = {
+    "mode": "live",       # "live" | "folder"
+    "folder_path": "",
+    "images": [],         # sorted list of absolute paths
+}
+
+
+@app.post("/set_mode")
+async def set_mode(data: dict):
+    mode = data.get("mode", "live")
+    if mode not in ("live", "folder"):
+        return JSONResponse({"error": "Ogiltigt läge"}, status_code=400)
+    _folder_state["mode"] = mode
+    system_log.info("Mode changed to: %s", mode)
+    return {"status": "ok", "mode": mode}
+
+
+@app.post("/set_folder")
+async def set_folder(data: dict):
+    path = data.get("path", "").strip()
+    if not path:
+        return JSONResponse({"error": "Sökvägen är tom"}, status_code=400)
+    if not os.path.isdir(path):
+        return JSONResponse({"error": f"Mappen finns inte: {path}"}, status_code=400)
+
+    images = []
+    for ext in _SUPPORTED_EXT:
+        images.extend(file_glob.glob(os.path.join(path, f"*{ext}")))
+        images.extend(file_glob.glob(os.path.join(path, f"*{ext.upper()}")))
+    images = sorted(set(images))
+
+    _folder_state["folder_path"] = path
+    _folder_state["images"] = images
+    system_log.info("Folder loaded: %s (%d images)", path, len(images))
+    return {"status": "ok", "count": len(images), "path": path}
+
+
+@app.get("/folder_image/{index}")
+def get_folder_image(index: int):
+    images = _folder_state["images"]
+    if not images:
+        return JSONResponse({"error": "Inga bilder laddade"}, status_code=404)
+    img_path = images[index % len(images)]
+    try:
+        content = Path(img_path).read_bytes()
+        ext = Path(img_path).suffix.lower()
+        media_type = "image/jpeg" if ext in (".jpg", ".jpeg") else "image/png"
+        return Response(content=content, media_type=media_type)
+    except OSError:
+        return JSONResponse({"error": "Kunde inte läsa bild"}, status_code=500)
+
+
+@app.get("/folder_status")
+def get_folder_status():
+    return {
+        "mode": _folder_state["mode"],
+        "folder_path": _folder_state["folder_path"],
+        "image_count": len(_folder_state["images"]),
+    }
 
 
 if __name__ == "__main__":

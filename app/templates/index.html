@@ -1,169 +1,377 @@
 <!DOCTYPE html>
-<html>
+<html lang="sv">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Plank Kontrollpanel</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <link rel="stylesheet" href="/static/style.css?v=4">
 </head>
 <body>
 
-<h1>Plank Kontrollpanel</h1>
-
-<div class="container">
-
-    <!-- VÄNSTER: Live -->
-    <div class="live-section">
-
-        <!-- KAMERASTATUS + RTSP -->
-        <div class="camera-bar">
-            <span id="camera-status" class="camera-status">● Ansluter...</span>
-            <div class="rtsp-section">
-                <input id="rtsp-url" type="text" placeholder="rtsp://...">
-                <button class="btn-rtsp" onclick="updateRtspUrl()">Anslut</button>
-            </div>
-        </div>
-
-        <h2>Live-flöde</h2>
-        <img src="/video_feed" class="live-img" id="live-img">
-
-        <div class="pause-controls">
-            <button class="btn-pause" onclick="pause()">Pausa</button>
-            <button class="btn-resume" onclick="resume()">Återuppta</button>
-        </div>
+<!-- HEADER -->
+<header class="app-header">
+    <div class="brand">
+        <span class="brand-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="5" width="20" height="4" rx="1"/>
+                <rect x="2" y="11" width="20" height="4" rx="1"/>
+                <rect x="2" y="17" width="20" height="4" rx="1"/>
+            </svg>
+        </span>
+        <h1>Plank Kontrollpanel</h1>
     </div>
+</header>
 
-    <!-- HÖGER: Parametrar -->
-    <div class="control-section">
+<!-- MAIN -->
+<main class="app-main">
+    <div class="container">
 
-        <!-- PRESET-KONTROLL -->
-        <div class="preset-section">
-            <h2>Presets</h2>
-            <div class="preset-card">
-                <div class="preset-top">
-                    <select id="preset-select">
-                        <option value="">Välj preset...</option>
-                    </select>
-                    <button class="btn-load" onclick="loadPreset()">Ladda</button>
-                </div>
-                <div class="preset-actions">
-                    <button class="btn-update-preset" onclick="updatePreset()">Uppdatera</button>
-                    <button class="btn-delete-preset" onclick="deletePreset()">Ta bort</button>
-                </div>
-                <div class="preset-create">
-                    <input id="preset-name" type="text" placeholder="Namn på nytt preset">
-                    <button class="btn-save-preset" onclick="savePreset()">Spara</button>
-                </div>
-                <button class="btn-defaults" onclick="resetDefaults()">
-                    Återställ standard
+        <!-- VÄNSTER: Feed / Bildspel -->
+        <div class="live-section">
+
+            <!-- MODE TOGGLE -->
+            <div class="mode-toggle-bar">
+                <button id="btn-mode-live" class="mode-btn active" onclick="setMode('live')">
+                    <div class="mode-btn-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"/>
+                            <circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/>
+                        </svg>
+                    </div>
+                    <div class="mode-btn-text">
+                        <span class="mode-btn-label">Live Feed</span>
+                        <span class="mode-btn-sub">Kamera / RTSP</span>
+                    </div>
+                </button>
+                <button id="btn-mode-folder" class="mode-btn" onclick="setMode('folder')">
+                    <div class="mode-btn-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                        </svg>
+                    </div>
+                    <div class="mode-btn-text">
+                        <span class="mode-btn-label">Bildspel</span>
+                        <span class="mode-btn-sub">Mapp med bilder</span>
+                    </div>
                 </button>
             </div>
+
+            <!-- LIVE: kamerastatus + RTSP -->
+            <div id="live-bar" class="camera-bar">
+                <span id="camera-status" class="camera-status disconnected">Ansluter...</span>
+                <div class="rtsp-section">
+                    <input id="rtsp-url" type="text" placeholder="rtsp://...">
+                    <button class="btn btn-success btn-sm" onclick="updateRtspUrl()">Anslut</button>
+                </div>
+            </div>
+
+            <!-- FOLDER: drop zone -->
+            <div id="folder-bar" style="display:none">
+                <div id="drop-zone" class="drop-zone">
+                    <!-- Tom state -->
+                    <div id="dz-empty" class="dz-empty">
+                        <div class="dz-icon">
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                                <line x1="12" y1="11" x2="12" y2="17"/>
+                                <line x1="9" y1="14" x2="15" y2="14"/>
+                            </svg>
+                        </div>
+                        <p class="dz-title">Dra in en mapp med bilder här</p>
+                        <p class="dz-sub">JPG · PNG · WebP · BMP</p>
+                    </div>
+                    <!-- Laddat state -->
+                    <div id="dz-loaded" class="dz-loaded" style="display:none">
+                        <div class="dz-loaded-icon">
+                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                                <path d="m9 12 2 2 4-4"/>
+                            </svg>
+                        </div>
+                        <div class="dz-loaded-info">
+                            <span class="dz-loaded-count" id="dz-count">0 bilder</span>
+                            <span class="dz-loaded-name" id="dz-name">—</span>
+                        </div>
+                        <button class="btn btn-ghost btn-sm" onclick="clearFolder()">Rensa</button>
+                    </div>
+                    <!-- Laddar state -->
+                    <div id="dz-loading" class="dz-loading" style="display:none">
+                        <div class="dz-spinner"></div>
+                        <p class="dz-title">Laddar bilder...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bild/feed -->
+            <p class="section-label" id="feed-label">Live-flöde</p>
+            <img src="/video_feed" class="live-img" id="main-img">
+
+            <!-- LIVE: Pausa / Återuppta -->
+            <div id="live-playback" class="video-controls">
+                <button class="btn btn-warning" onclick="pause()">Pausa</button>
+                <button class="btn btn-success" onclick="resume()">Återuppta</button>
+            </div>
+
+            <!-- FOLDER: Bildräknare -->
+            <div id="folder-counter-bar" class="folder-counter-bar" style="display:none">
+                <span id="folder-counter">—</span>
+            </div>
+
         </div>
 
-        <hr style="margin: 15px 0; border: 1px solid #eee;">
-        <h2>Parametrar</h2>
+        <!-- HÖGER: Kontroll -->
+        <div class="control-section">
 
-        <div class="slider-group">
-            <label>Hastighet (s/bild): <span id="val_FRAME_DELAY">0.30</span></label>
-            <input type="range" min="0.05" max="2.0" step="0.05" value="0.30"
-                   oninput="update('FRAME_DELAY', this.value)">
-        </div>
+            <!-- PRESETS -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+                        <polyline points="17 21 17 13 7 13 7 21"/>
+                        <polyline points="7 3 7 8 15 8"/>
+                    </svg>
+                    <span class="card-title">Presets</span>
+                </div>
+                <div class="card-body">
+                    <div class="preset-rows">
+                        <div class="preset-row">
+                            <select id="preset-select">
+                                <option value="">— Välj preset —</option>
+                            </select>
+                            <button class="btn btn-primary btn-sm" onclick="loadPreset()">Ladda</button>
+                        </div>
+                        <div class="preset-row">
+                            <button class="btn btn-warning btn-sm" style="flex:1" onclick="updatePreset()">Uppdatera</button>
+                            <button class="btn btn-danger btn-sm" style="flex:1" onclick="deletePreset()">Ta bort</button>
+                        </div>
+                        <div class="preset-row">
+                            <input id="preset-name" type="text" placeholder="Namn på nytt preset">
+                            <button class="btn btn-success btn-sm" onclick="savePreset()">Spara</button>
+                        </div>
+                        <button class="btn btn-secondary btn-full" onclick="resetDefaults()">Återställ standard</button>
+                    </div>
+                </div>
+            </div>
 
-        <hr style="margin: 15px 0; border: 1px solid #eee;">
-        <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Detektion</h3>
+            <!-- BILDSPEL -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2"/>
+                        <path d="M8 21h8"/>
+                        <path d="M12 17v4"/>
+                        <path d="m10 9 5 3-5 3V9z" fill="currentColor" stroke="none"/>
+                    </svg>
+                    <span class="card-title">Bildspel</span>
+                </div>
+                <div class="card-body">
+                    <div class="slider-group" style="margin-bottom:0">
+                        <div class="slider-label">
+                            <span class="slider-name">Hastighet (s/bild)</span>
+                            <span class="slider-value" id="val_FRAME_DELAY">0.50</span>
+                        </div>
+                        <input type="range" id="slider-frame-delay"
+                               min="0.1" max="5.0" step="0.1" value="0.5"
+                               oninput="updateFrameDelay(this.value)">
+                    </div>
+                </div>
+            </div>
 
-        <div class="slider-group">
-            <label>Plank Confidence: <span id="val_CONFIDENCE">0.80</span></label>
-            <input type="range" min="0" max="1" step="0.01" value="0.80"
-                   oninput="updateConfidence(this.value)">
-        </div>
+            <!-- DETEKTION -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"/>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                    </svg>
+                    <span class="card-title">Detektion</span>
+                </div>
+                <div class="card-body">
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Plank Confidence</span>
+                            <span class="slider-value" id="val_CONFIDENCE">0.80</span>
+                        </div>
+                        <input type="range" min="0" max="1" step="0.01" value="0.80"
+                               oninput="updateConfidence(this.value)">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Crack Confidence</span>
+                            <span class="slider-value" id="val_CRACK_CONFIDENCE">0.20</span>
+                        </div>
+                        <input type="range" min="0" max="1" step="0.01" value="0.20"
+                               oninput="update('CRACK_CONFIDENCE', this.value)">
+                    </div>
+                </div>
+            </div>
 
-        <div class="slider-group">
-            <label>Crack Confidence: <span id="val_CRACK_CONFIDENCE">0.20</span></label>
-            <input type="range" min="0" max="1" step="0.01" value="0.20"
-                   oninput="update('CRACK_CONFIDENCE', this.value)">
-        </div>
+            <!-- HÖRNDETEKTERING -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="2" width="7" height="7" rx="1"/>
+                        <rect x="15" y="2" width="7" height="7" rx="1"/>
+                        <rect x="2" y="15" width="7" height="7" rx="1"/>
+                        <rect x="15" y="15" width="7" height="7" rx="1"/>
+                    </svg>
+                    <span class="card-title">Hörndetektering</span>
+                </div>
+                <div class="card-body">
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Corner Scan Conf</span>
+                            <span class="slider-value" id="val_CORNER_SCAN_CONF">0.010</span>
+                        </div>
+                        <input type="range" min="0.001" max="0.2" step="0.001" value="0.01"
+                               oninput="update('CORNER_SCAN_CONF', this.value)">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Corner Min Conf</span>
+                            <span class="slider-value" id="val_CORNER_MIN_CONF">0.10</span>
+                        </div>
+                        <input type="range" min="0.01" max="0.5" step="0.01" value="0.10"
+                               oninput="update('CORNER_MIN_CONF', this.value)">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Zone Margin</span>
+                            <span class="slider-value" id="val_ZONE_MARGIN">0.35</span>
+                        </div>
+                        <input type="range" min="0.1" max="0.5" step="0.01" value="0.35"
+                               oninput="update('ZONE_MARGIN', this.value)">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Distance Threshold</span>
+                            <span class="slider-value" id="val_DIST_THRESHOLD">30</span>
+                        </div>
+                        <input type="range" min="5" max="100" step="1" value="30"
+                               oninput="update('DIST_THRESHOLD', this.value)">
+                    </div>
+                </div>
+            </div>
 
-        <hr style="margin: 15px 0; border: 1px solid #eee;">
-        <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Hörndetektering (V/H-zon)</h3>
+            <!-- MARGINALER & KLIPPNING -->
+            <div class="card">
+                <div class="card-header">
+                    <svg class="card-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                        <line x1="3" y1="9" x2="21" y2="9"/>
+                        <line x1="3" y1="15" x2="21" y2="15"/>
+                        <line x1="9" y1="3" x2="9" y2="21"/>
+                        <line x1="15" y1="3" x2="15" y2="21"/>
+                    </svg>
+                    <span class="card-title">Marginaler &amp; Klippning</span>
+                </div>
+                <div class="card-body">
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Margin Left</span>
+                            <span class="slider-value" id="val_MARGIN_LEFT">50</span>
+                        </div>
+                        <input type="range" min="0" max="200" step="5" value="50"
+                               oninput="update('MARGIN_LEFT', this.value)">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Margin Right</span>
+                            <span class="slider-value" id="val_MARGIN_RIGHT">120</span>
+                        </div>
+                        <input type="range" min="0" max="300" step="5" value="120"
+                               oninput="update('MARGIN_RIGHT', this.value)">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Margin Y</span>
+                            <span class="slider-value" id="val_MARGIN_Y">15</span>
+                        </div>
+                        <input type="range" min="0" max="100" step="5" value="15"
+                               oninput="update('MARGIN_Y', this.value)">
+                    </div>
+                    <div class="slider-group">
+                        <div class="slider-label">
+                            <span class="slider-name">Crop Padding</span>
+                            <span class="slider-value" id="val_PAD">80</span>
+                        </div>
+                        <input type="range" min="0" max="200" step="5" value="80"
+                               oninput="update('PAD', this.value)">
+                    </div>
+                </div>
+            </div>
 
-        <div class="slider-group">
-            <label>Corner Scan Conf: <span id="val_CORNER_SCAN_CONF">0.01</span></label>
-            <input type="range" min="0.001" max="0.2" step="0.001" value="0.01"
-                   oninput="update('CORNER_SCAN_CONF', this.value)">
-        </div>
-
-        <div class="slider-group">
-            <label>Corner Min Conf (golv): <span id="val_CORNER_MIN_CONF">0.10</span></label>
-            <input type="range" min="0.01" max="0.5" step="0.01" value="0.10"
-                   oninput="update('CORNER_MIN_CONF', this.value)">
-        </div>
-
-        <div class="slider-group">
-            <label>Zone Margin: <span id="val_ZONE_MARGIN">0.35</span></label>
-            <input type="range" min="0.1" max="0.5" step="0.01" value="0.35"
-                   oninput="update('ZONE_MARGIN', this.value)">
-        </div>
-
-        <div class="slider-group">
-            <label>Distance Threshold: <span id="val_DIST_THRESHOLD">30</span></label>
-            <input type="range" min="5" max="100" step="1" value="30"
-                   oninput="update('DIST_THRESHOLD', this.value)">
-        </div>
-
-        <hr style="margin: 15px 0; border: 1px solid #eee;">
-        <h3 style="margin: 0 0 10px 0; font-size: 14px; color: #666;">Marginaler</h3>
-
-        <div class="slider-group">
-            <label>Margin Left: <span id="val_MARGIN_LEFT">50</span></label>
-            <input type="range" min="0" max="200" step="5" value="50"
-                   oninput="update('MARGIN_LEFT', this.value)">
-        </div>
-
-        <div class="slider-group">
-            <label>Margin Right: <span id="val_MARGIN_RIGHT">120</span></label>
-            <input type="range" min="0" max="300" step="5" value="120"
-                   oninput="update('MARGIN_RIGHT', this.value)">
-        </div>
-
-        <div class="slider-group">
-            <label>Margin Y: <span id="val_MARGIN_Y">15</span></label>
-            <input type="range" min="0" max="100" step="5" value="15"
-                   oninput="update('MARGIN_Y', this.value)">
         </div>
     </div>
-</div>
 
-<!-- STATISTIK -->
-<div class="stats-bar">
-    <div class="stats-header">
-        <h2>Statistik</h2>
-        <button class="btn-reset-stats" onclick="resetStats()">Nollställ</button>
+    <!-- STATISTIK -->
+    <div class="stats-bar">
+        <div class="stats-header">
+            <span class="stats-title">Statistik</span>
+            <button class="btn btn-danger btn-sm" onclick="resetStats()">Nollställ</button>
+        </div>
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/>
+                        <path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/>
+                    </svg>
+                </span>
+                <span class="stat-value" id="stat-total">0</span>
+                <span class="stat-label">Plankor totalt</span>
+            </div>
+            <div class="stat-card good">
+                <span class="stat-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                        <path d="m9 12 2 2 4-4"/>
+                    </svg>
+                </span>
+                <span class="stat-value" id="stat-good">0</span>
+                <span class="stat-label">Godkända</span>
+            </div>
+            <div class="stat-card bad">
+                <span class="stat-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>
+                    </svg>
+                </span>
+                <span class="stat-value" id="stat-cracks">0</span>
+                <span class="stat-label">Sprickor</span>
+            </div>
+            <div class="stat-card bad">
+                <span class="stat-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="2" y="2" width="7" height="7" rx="1"/>
+                        <rect x="15" y="2" width="7" height="7" rx="1"/>
+                        <rect x="2" y="15" width="7" height="7" rx="1"/>
+                        <rect x="15" y="15" width="7" height="7" rx="1"/>
+                    </svg>
+                </span>
+                <span class="stat-value" id="stat-corners">0</span>
+                <span class="stat-label">Defekta hörn</span>
+            </div>
+            <div class="stat-card pct">
+                <span class="stat-icon">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <line x1="19" y1="5" x2="5" y2="19"/>
+                        <circle cx="6.5" cy="6.5" r="2.5"/>
+                        <circle cx="17.5" cy="17.5" r="2.5"/>
+                    </svg>
+                </span>
+                <span class="stat-value" id="stat-defekt-pct">0%</span>
+                <span class="stat-label">Defekt-andel</span>
+            </div>
+        </div>
     </div>
-    <div class="stats-grid">
-        <div class="stat-card">
-            <span class="stat-value" id="stat-total">0</span>
-            <span class="stat-label">Plankor totalt</span>
-        </div>
-        <div class="stat-card good">
-            <span class="stat-value" id="stat-good">0</span>
-            <span class="stat-label">Godkända</span>
-        </div>
-        <div class="stat-card bad">
-            <span class="stat-value" id="stat-cracks">0</span>
-            <span class="stat-label">Sprickor</span>
-        </div>
-        <div class="stat-card bad">
-            <span class="stat-value" id="stat-corners">0</span>
-            <span class="stat-label">Defekta hörn</span>
-        </div>
-        <div class="stat-card pct">
-            <span class="stat-value" id="stat-defekt-pct">0%</span>
-            <span class="stat-label">Defekt-andel</span>
-        </div>
-    </div>
-</div>
 
-<h2>Senaste 4 defekta plankor</h2>
-<div id="defects" class="defect-grid"></div>
+    <!-- SENASTE DEFEKTER -->
+    <div class="defects-section">
+        <p class="section-label">Senaste 4 defekta plankor</p>
+        <div id="defects" class="defect-grid"></div>
+    </div>
+</main>
 
 <!-- Modal -->
 <div id="modal" class="modal" onclick="closeModal()">
@@ -173,45 +381,271 @@
 <script>
 
 // ==========================================
+// HJÄLPFUNKTIONER
+// ==========================================
+
+function formatValue(num) {
+    if (num >= 1 && num === Math.round(num)) return num.toFixed(0);
+    if (num < 0.1) return num.toFixed(3);
+    return num.toFixed(2);
+}
+
+function updateSliderFill(slider) {
+    const min = parseFloat(slider.min);
+    const max = parseFloat(slider.max);
+    const val = parseFloat(slider.value);
+    const pct = ((val - min) / (max - min)) * 100;
+    slider.style.setProperty('--fill', pct + '%');
+}
+
+// ==========================================
+// LÄGESHANTERING (Live ↔ Bildspel)
+// ==========================================
+
+let currentMode      = 'live';
+let folderLoopId     = 0;
+let folderPaused     = false;
+let processedImgUrl  = null;
+let currentImageIndex = 0;
+let folderImages     = [];   // [{ src, name }]
+let folderFrameDelay = 0.5;
+
+function setMode(mode) {
+    if (mode === currentMode) return;
+    stopSlideshow();
+    folderPaused = false;
+    currentMode = mode;
+
+    const mainImg         = document.getElementById('main-img');
+    const liveBar         = document.getElementById('live-bar');
+    const folderBar       = document.getElementById('folder-bar');
+    const livePlay        = document.getElementById('live-playback');
+    const folderCountBar  = document.getElementById('folder-counter-bar');
+    const feedLabel       = document.getElementById('feed-label');
+    const btnLive         = document.getElementById('btn-mode-live');
+    const btnFolder       = document.getElementById('btn-mode-folder');
+
+    if (mode === 'live') {
+        btnLive.classList.add('active');
+        btnFolder.classList.remove('active');
+        liveBar.style.display        = '';
+        folderBar.style.display      = 'none';
+        livePlay.style.display       = '';
+        folderCountBar.style.display = 'none';
+        feedLabel.textContent        = 'Live-flöde';
+        mainImg.src = '/video_feed?' + Date.now();
+    } else {
+        btnFolder.classList.add('active');
+        btnLive.classList.remove('active');
+        liveBar.style.display        = 'none';
+        folderBar.style.display      = '';
+        livePlay.style.display       = '';
+        folderCountBar.style.display = '';
+        feedLabel.textContent        = 'Bildspel';
+        mainImg.removeAttribute('src');
+        if (folderImages.length > 0) startSlideshow();
+    }
+
+    fetch('/set_mode', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mode})
+    });
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function stopSlideshow() {
+    folderLoopId++;
+}
+
+function startSlideshow() {
+    const myId = ++folderLoopId;
+    currentImageIndex = 0;
+
+    (async () => {
+        while (folderLoopId === myId && folderImages.length > 0) {
+            if (folderPaused) {
+                await sleep(100);
+                continue;
+            }
+            const t0 = Date.now();
+            await processAndShowFolderImage(currentImageIndex);
+            if (folderLoopId !== myId) break;
+            currentImageIndex = (currentImageIndex + 1) % folderImages.length;
+            const remaining = folderFrameDelay * 1000 - (Date.now() - t0);
+            if (remaining > 0) await sleep(remaining);
+        }
+    })();
+}
+
+async function processAndShowFolderImage(index) {
+    if (folderImages.length === 0) return;
+    const entry = folderImages[index % folderImages.length];
+
+    const counter = document.getElementById('folder-counter');
+    if (counter) counter.textContent = (index + 1) + ' / ' + folderImages.length;
+
+    try {
+        const blob = await fetch(entry.src).then(r => r.blob());
+        const formData = new FormData();
+        formData.append('image', blob, entry.name);
+
+        const res = await fetch('/process_image', {method: 'POST', body: formData});
+        if (!res.ok) throw new Error('Detection failed');
+
+        const annotatedBlob = await res.blob();
+        const newUrl = URL.createObjectURL(annotatedBlob);
+
+        if (processedImgUrl) URL.revokeObjectURL(processedImgUrl);
+        processedImgUrl = newUrl;
+        document.getElementById('main-img').src = newUrl;
+    } catch (_) {
+        document.getElementById('main-img').src = entry.src;
+    }
+}
+
+function updateFrameDelay(value) {
+    folderFrameDelay = parseFloat(value);
+    const span = document.getElementById('val_FRAME_DELAY');
+    if (span) span.innerText = parseFloat(value).toFixed(2);
+    updateSliderFill(document.getElementById('slider-frame-delay'));
+}
+
+// ==========================================
+// DRAG & DROP
+// ==========================================
+
+function isImageFileName(name) {
+    return /\.(jpe?g|png|webp|bmp|tiff?|gif)$/i.test(name);
+}
+
+async function readDirImages(dirEntry, out) {
+    const reader = dirEntry.createReader();
+    let batch;
+    do {
+        batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+        for (const entry of batch) {
+            if (entry.isFile && isImageFileName(entry.name)) {
+                const file = await new Promise((res, rej) => entry.file(res, rej));
+                out.push({ src: URL.createObjectURL(file), name: file.name });
+            }
+        }
+    } while (batch.length > 0);
+}
+
+function showDzState(state) {
+    document.getElementById('dz-empty').style.display   = state === 'empty'   ? '' : 'none';
+    document.getElementById('dz-loaded').style.display  = state === 'loaded'  ? '' : 'none';
+    document.getElementById('dz-loading').style.display = state === 'loading' ? '' : 'none';
+}
+
+function initDropZone() {
+    const dz = document.getElementById('drop-zone');
+
+    dz.addEventListener('dragenter', (e) => { e.preventDefault(); dz.classList.add('dragover'); });
+    dz.addEventListener('dragover',  (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+    dz.addEventListener('dragleave', (e) => {
+        if (!dz.contains(e.relatedTarget)) dz.classList.remove('dragover');
+    });
+
+    dz.addEventListener('drop', async (e) => {
+        e.preventDefault();
+        dz.classList.remove('dragover');
+
+        const items = [...e.dataTransfer.items];
+        const newImages = [];
+        let folderName  = '';
+
+        showDzState('loading');
+
+        for (const item of items) {
+            if (item.kind !== 'file') continue;
+            const entry = item.webkitGetAsEntry?.();
+            if (!entry) continue;
+
+            if (entry.isDirectory) {
+                if (!folderName) folderName = entry.name;
+                await readDirImages(entry, newImages);
+            } else if (entry.isFile && isImageFileName(entry.name)) {
+                const file = item.getAsFile();
+                if (file) newImages.push({ src: URL.createObjectURL(file), name: file.name });
+            }
+        }
+
+        newImages.sort((a, b) => a.name.localeCompare(b.name, 'sv', {numeric: true}));
+        applyFolderImages(newImages, folderName || 'Filer');
+    });
+}
+
+function applyFolderImages(images, folderName) {
+    if (processedImgUrl) { URL.revokeObjectURL(processedImgUrl); processedImgUrl = null; }
+    // Frigör gamla object-URL:er
+    for (const img of folderImages) {
+        if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    }
+
+    folderImages = images;
+    currentImageIndex = 0;
+
+    document.getElementById('dz-count').textContent = images.length + ' bilder';
+    document.getElementById('dz-name').textContent  = folderName;
+
+    if (images.length > 0) {
+        showDzState('loaded');
+        if (currentMode === 'folder') startSlideshow();
+    } else {
+        showDzState('empty');
+    }
+}
+
+function clearFolder() {
+    stopSlideshow();
+    folderPaused = false;
+    if (processedImgUrl) { URL.revokeObjectURL(processedImgUrl); processedImgUrl = null; }
+    for (const img of folderImages) {
+        if (img.src.startsWith('blob:')) URL.revokeObjectURL(img.src);
+    }
+    folderImages = [];
+    currentImageIndex = 0;
+    showDzState('empty');
+    document.getElementById('main-img').removeAttribute('src');
+    const counter = document.getElementById('folder-counter');
+    if (counter) counter.textContent = '—';
+}
+
+// ==========================================
 // KAMERASTATUS
 // ==========================================
 
 async function pollStatus() {
     try {
-        const res = await fetch("/get_status");
+        const res  = await fetch('/get_status');
         const data = await res.json();
-        const el = document.getElementById("camera-status");
-
+        const el   = document.getElementById('camera-status');
         if (data.camera_connected) {
-            el.textContent = data.is_paused ? "⏸ Pausad" : "● Live";
-            el.className = "camera-status " + (data.is_paused ? "paused" : "connected");
+            el.textContent = data.is_paused ? 'Pausad' : 'Live';
+            el.className   = 'camera-status ' + (data.is_paused ? 'paused' : 'connected');
         } else {
-            el.textContent = "○ Ansluter...";
-            el.className = "camera-status disconnected";
+            el.textContent = 'Ansluter...';
+            el.className   = 'camera-status disconnected';
         }
-
-        // Fyll i RTSP-URL vid första laddning
-        const rtspInput = document.getElementById("rtsp-url");
-        if (!rtspInput.value && data.rtsp_url) {
-            rtspInput.value = data.rtsp_url;
-        }
+        const rtspInput = document.getElementById('rtsp-url');
+        if (!rtspInput.value && data.rtsp_url) rtspInput.value = data.rtsp_url;
     } catch(e) {}
 }
 
 function updateRtspUrl() {
-    const url = document.getElementById("rtsp-url").value.trim();
-    if (!url) {
-        alert("Ange en RTSP-URL.");
-        return;
-    }
-    fetch("/set_rtsp_url", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({url: url})
+    const url = document.getElementById('rtsp-url').value.trim();
+    if (!url) { alert('Ange en RTSP-URL.'); return; }
+    fetch('/set_rtsp_url', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({url})
     }).then(r => r.json()).then(data => {
-        if (data.status === "ok") {
-            reconnectStream();
-        }
+        if (data.status === 'ok') reconnectStream();
     });
 }
 
@@ -220,29 +654,34 @@ function updateRtspUrl() {
 // ==========================================
 
 function update(param, value) {
-    const el = document.getElementById("val_" + param);
-    if (el) {
-        const num = parseFloat(value);
-        el.innerText = num < 0.1 ? num.toFixed(3) : num.toFixed(2);
-    }
-    fetch("/update_config", {
-        method: "POST",
-        headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({param: param, value: value})
+    const el = document.getElementById('val_' + param);
+    if (el) el.innerText = formatValue(parseFloat(value));
+    fetch('/update_config', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({param, value})
     });
 }
 
 function updateConfidence(val) {
-    document.getElementById("val_CONFIDENCE").innerText = parseFloat(val).toFixed(2);
-    fetch("/set_confidence/" + val, { method: "POST" });
+    document.getElementById('val_CONFIDENCE').innerText = parseFloat(val).toFixed(2);
+    fetch('/set_confidence/' + val, {method: 'POST'});
 }
 
 function pause() {
-    fetch("/pause", { method: "POST" });
+    if (currentMode === 'live') {
+        fetch('/pause', {method: 'POST'});
+    } else {
+        folderPaused = true;
+    }
 }
 
 function resume() {
-    fetch("/resume", { method: "POST" });
+    if (currentMode === 'live') {
+        fetch('/resume', {method: 'POST'});
+    } else {
+        folderPaused = false;
+    }
 }
 
 // ==========================================
@@ -251,49 +690,47 @@ function resume() {
 
 async function loadDefects() {
     try {
-        const res = await fetch("/defects");
+        const res  = await fetch('/defects');
         const data = await res.json();
-        const container = document.getElementById("defects");
-        container.innerHTML = "";
+        const container = document.getElementById('defects');
+        container.innerHTML = '';
         data.images.forEach(imgHex => {
-            const img = document.createElement("img");
-            img.src = "data:image/jpeg;base64," + hexToBase64(imgHex);
-            img.className = "defect-img";
-            img.onclick = () => openModal(img.src);
+            const img = document.createElement('img');
+            img.src       = 'data:image/jpeg;base64,' + hexToBase64(imgHex);
+            img.className = 'defect-img';
+            img.onclick   = () => openModal(img.src);
             container.appendChild(img);
         });
-    } catch (e) {
-        console.error("Kunde inte ladda defekter:", e);
-    }
+    } catch(e) {}
 }
 
 function hexToBase64(hex) {
-    const bytes = new Uint8Array(hex.match(/.{1,2}/g)
-        .map(byte => parseInt(byte, 16)));
+    const bytes = new Uint8Array(hex.match(/.{1,2}/g).map(b => parseInt(b, 16)));
     let binary = '';
     bytes.forEach(b => binary += String.fromCharCode(b));
     return btoa(binary);
 }
 
 function openModal(src) {
-    document.getElementById("modal").style.display = "block";
-    document.getElementById("modal-img").src = src;
+    document.getElementById('modal').style.display = 'flex';
+    document.getElementById('modal-img').src = src;
 }
 
 function closeModal() {
-    document.getElementById("modal").style.display = "none";
+    document.getElementById('modal').style.display = 'none';
 }
 
 setInterval(loadDefects, 2000);
-setInterval(pollStatus, 1500);
+setInterval(pollStatus,  1500);
 
 // ==========================================
 // STRÖM
 // ==========================================
 
 function reconnectStream() {
-    const img = document.getElementById('live-img');
-    img.src = '/video_feed?' + Date.now();
+    if (currentMode === 'live') {
+        document.getElementById('main-img').src = '/video_feed?' + Date.now();
+    }
 }
 
 // ==========================================
@@ -301,90 +738,85 @@ function reconnectStream() {
 // ==========================================
 
 const SLIDER_PARAMS = [
-    "FRAME_DELAY", "CONFIDENCE", "CRACK_CONFIDENCE",
-    "CORNER_SCAN_CONF", "CORNER_MIN_CONF", "ZONE_MARGIN", "DIST_THRESHOLD",
-    "MARGIN_LEFT", "MARGIN_RIGHT", "MARGIN_Y"
+    'CONFIDENCE', 'CRACK_CONFIDENCE',
+    'CORNER_SCAN_CONF', 'CORNER_MIN_CONF', 'ZONE_MARGIN', 'DIST_THRESHOLD',
+    'MARGIN_LEFT', 'MARGIN_RIGHT', 'MARGIN_Y', 'PAD'
 ];
 
 function findSlider(param) {
-    const span = document.getElementById("val_" + param);
+    const span = document.getElementById('val_' + param);
     if (!span) return null;
-    return span.parentElement.parentElement.querySelector("input[type=range]");
+    const group = span.closest('.slider-group');
+    return group ? group.querySelector('input[type=range]') : null;
 }
 
 function applySlidersFromValues(values) {
     for (const param of SLIDER_PARAMS) {
         if (!(param in values)) continue;
-        const val = values[param];
+        const val    = values[param];
         const slider = findSlider(param);
-        if (slider) slider.value = val;
-        const span = document.getElementById("val_" + param);
-        if (span) {
-            const num = parseFloat(val);
-            span.innerText = num < 0.1 ? num.toFixed(3) : num.toFixed(2);
-        }
+        if (slider) { slider.value = val; updateSliderFill(slider); }
+        const span = document.getElementById('val_' + param);
+        if (span) span.innerText = formatValue(parseFloat(val));
     }
 }
 
 async function refreshPresetList() {
     try {
-        const res = await fetch("/presets");
+        const res  = await fetch('/presets');
         const data = await res.json();
-        const sel = document.getElementById("preset-select");
-        const current = sel.value;
+        const sel  = document.getElementById('preset-select');
+        const cur  = sel.value;
         sel.innerHTML = '<option value="">— Välj preset —</option>';
         for (const name of Object.keys(data.presets)) {
-            const opt = document.createElement("option");
-            opt.value = name;
-            opt.textContent = name;
+            const opt = document.createElement('option');
+            opt.value = opt.textContent = name;
             sel.appendChild(opt);
         }
-        sel.value = current;
-    } catch (e) {
-        console.error("Kunde inte hämta presets:", e);
-    }
+        sel.value = cur;
+    } catch(e) {}
 }
 
 async function savePreset() {
-    const nameInput = document.getElementById("preset-name");
+    const nameInput = document.getElementById('preset-name');
     const name = nameInput.value.trim();
-    if (!name) { alert("Ange ett namn."); return; }
-    await fetch("/presets/" + encodeURIComponent(name), { method: "POST" });
-    nameInput.value = "";
+    if (!name) { alert('Ange ett namn.'); return; }
+    await fetch('/presets/' + encodeURIComponent(name), {method: 'POST'});
+    nameInput.value = '';
     await refreshPresetList();
-    document.getElementById("preset-select").value = name;
+    document.getElementById('preset-select').value = name;
 }
 
 async function loadPreset() {
-    const name = document.getElementById("preset-select").value;
-    if (!name) { alert("Välj en preset först."); return; }
-    const res = await fetch("/load_preset/" + encodeURIComponent(name), { method: "POST" });
+    const name = document.getElementById('preset-select').value;
+    if (!name) { alert('Välj en preset först.'); return; }
+    const res  = await fetch('/load_preset/' + encodeURIComponent(name), {method: 'POST'});
     const data = await res.json();
     if (data.values) applySlidersFromValues(data.values);
     reconnectStream();
 }
 
 async function deletePreset() {
-    const sel = document.getElementById("preset-select");
+    const sel  = document.getElementById('preset-select');
     const name = sel.value;
-    if (!name) { alert("Välj en preset att ta bort."); return; }
+    if (!name) { alert('Välj en preset att ta bort.'); return; }
     if (!confirm('Ta bort "' + name + '"?')) return;
-    await fetch("/presets/" + encodeURIComponent(name), { method: "DELETE" });
+    await fetch('/presets/' + encodeURIComponent(name), {method: 'DELETE'});
     await refreshPresetList();
 }
 
 async function updatePreset() {
-    const name = document.getElementById("preset-select").value;
-    if (!name) { alert("Välj en preset att uppdatera."); return; }
+    const name = document.getElementById('preset-select').value;
+    if (!name) { alert('Välj en preset att uppdatera.'); return; }
     if (!confirm('Skriva över "' + name + '"?')) return;
-    await fetch("/presets/" + encodeURIComponent(name), { method: "POST" });
+    await fetch('/presets/' + encodeURIComponent(name), {method: 'POST'});
 }
 
 async function resetDefaults() {
-    const res = await fetch("/reset_defaults", { method: "POST" });
+    const res  = await fetch('/reset_defaults', {method: 'POST'});
     const data = await res.json();
     if (data.values) applySlidersFromValues(data.values);
-    document.getElementById("preset-select").value = "";
+    document.getElementById('preset-select').value = '';
     reconnectStream();
 }
 
@@ -394,19 +826,19 @@ async function resetDefaults() {
 
 async function pollStats() {
     try {
-        const res = await fetch("/stats");
-        const s = await res.json();
-        document.getElementById("stat-total").textContent = s.total_planks;
-        document.getElementById("stat-good").textContent = s.good_planks;
-        document.getElementById("stat-cracks").textContent = s.defekt_cracks;
-        document.getElementById("stat-corners").textContent = s.defekt_corners;
-        document.getElementById("stat-defekt-pct").textContent = s.defekt_pct + "%";
+        const res = await fetch('/stats');
+        const s   = await res.json();
+        document.getElementById('stat-total').textContent      = s.total_planks;
+        document.getElementById('stat-good').textContent       = s.good_planks;
+        document.getElementById('stat-cracks').textContent     = s.defekt_cracks;
+        document.getElementById('stat-corners').textContent    = s.defekt_corners;
+        document.getElementById('stat-defekt-pct').textContent = s.defekt_pct + '%';
     } catch(e) {}
 }
 
 async function resetStats() {
-    if (!confirm("Nollställ all statistik?")) return;
-    await fetch("/reset_stats", { method: "POST" });
+    if (!confirm('Nollställ all statistik?')) return;
+    await fetch('/reset_stats', {method: 'POST'});
 }
 
 setInterval(pollStats, 1500);
@@ -414,9 +846,16 @@ setInterval(pollStats, 1500);
 // ==========================================
 // INIT
 // ==========================================
+
 refreshPresetList();
 pollStatus();
 pollStats();
+initDropZone();
+
+document.querySelectorAll('input[type=range]').forEach(slider => {
+    updateSliderFill(slider);
+    slider.addEventListener('input', () => updateSliderFill(slider));
+});
 
 </script>
 

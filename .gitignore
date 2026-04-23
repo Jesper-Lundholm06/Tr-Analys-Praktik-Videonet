@@ -1,0 +1,32 @@
+# Genererade defektbilder (runtime-output)
+app/defekta_plankor/
+app/defekta_horn/
+
+# Loggar
+app/logs/
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# PyInstaller
+app/dist/
+app/build/
+*.spec.bak
+
+# Presets (lokal konfiguration)
+app/presets.json
+
+# Miljöfiler
+.env
+settings.local.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
